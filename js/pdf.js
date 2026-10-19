@@ -1,7 +1,7 @@
 /*
  * IPsec Tunnelmatch – PDF parameter sheet (jsPDF + jsPDF-AutoTable)
  *
- * TM.buildPdf(S, R) returns the PDF as an ArrayBuffer. The sheet is in English
+ * TM.buildPdf(S, R, baseline) returns the PDF as an ArrayBuffer. The sheet is in English
  * because it usually goes to an external party. The pre-shared key is never in it.
  */
 (function () {
@@ -37,7 +37,9 @@
     return notes;
   }
 
-  function buildPdf(S, R) {
+  const GRADE = { rec: "Recommended", min: "Meets minimum", below: "Below baseline", manual: "Check by hand" };
+
+  function buildPdf(S, R, baseline) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const W = doc.internal.pageSize.getWidth();
@@ -114,6 +116,21 @@
         ? R.selectors.map(([a, b], i) => [String(i + 1), a.text, b.text])
         : [["-", "0.0.0.0/0 (route-based)", "0.0.0.0/0 (route-based)"]],
       columnStyles: { 0: { cellWidth: 30 } },
+    });
+
+    if (baseline) {
+      table({
+        startY: next(),
+        head: [["Baseline (NIST, RFC 8247, NSA, BSI)", "Agreed value", "Guidance", "Grade: " + GRADE[baseline.overall]]],
+        body: baseline.rows.map((r) => [r.setting, r.value, r.recommendation, GRADE[r.status]]),
+      });
+    }
+
+    table({
+      startY: next(),
+      head: [["Go-live checklist", "Done"]],
+      body: TM.baseline.CHECKLIST.map(([id, text]) => [text, S.checklist && S.checklist[id] ? "Yes" : "No"]),
+      columnStyles: { 0: { cellWidth: "auto" }, 1: { cellWidth: 50, halign: "center" } },
     });
 
     table({

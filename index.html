@@ -128,6 +128,37 @@
     <ul id="checks"></ul>
   </section>
 
+  <!-- Recommended baseline: rows come from js/baseline.js -->
+  <section class="panel" id="baseline" aria-label="Recommended baseline">
+    <div class="panel-head">
+      <h2>Recommended baseline</h2>
+      <span id="baselineStatus" class="pill">–</span>
+    </div>
+    <p class="hint section-intro">
+      Your profile graded against NIST SP 800-77, RFC 8247, NSA and BSI guidance (see Sources).
+      “Meets minimum” is acceptable; “Recommended” is what current guidance asks for.
+    </p>
+    <div class="baseline-actions">
+      <button class="btn ghost" id="strongestBtn" type="button">Use strongest profile both sides support</button>
+      <span class="hint" id="strongestHint" aria-live="polite"></span>
+    </div>
+    <div class="tbl-wrap"><table id="baselineTable"></table></div>
+  </section>
+
+  <!-- Go-live checklist -->
+  <section class="panel" id="checklist" aria-label="Go-live checklist">
+    <div class="panel-head">
+      <h2>Go-live checklist</h2>
+      <span class="eyebrow" id="checklistCount"></span>
+    </div>
+    <ul class="checklist" id="checklistItems"></ul>
+    <div class="report-row">
+      <p class="hint">Tunnel working? Share the combination and firmware versions so others know it works.
+        <a href="https://github.com/viktormar1337/ipsec-tunnelmatch/issues/1" target="_blank" rel="noopener">See confirmed combinations</a>.</p>
+      <a class="btn ghost" id="reportLink" href="https://github.com/viktormar1337/ipsec-tunnelmatch/issues/new?template=working_config.yml" target="_blank" rel="noopener">Report a working configuration</a>
+    </div>
+  </section>
+
   <!-- Effective traffic selectors -->
   <section class="panel" aria-label="Traffic selectors">
     <div class="panel-head"><h2>Effective traffic selectors</h2><span class="eyebrow" id="tsMode"></span></div>
@@ -162,7 +193,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
-<!-- Core first, then one file per vendor, then rules, PDF and the page itself -->
+<!-- Core first, then one file per vendor, then rules, baseline, PDF and the page itself -->
 <script src="js/core.js"></script>
 <script src="js/vendors/azure.js"></script>
 <script src="js/vendors/paloalto.js"></script>
@@ -173,6 +204,7 @@
 <script src="js/vendors/strongswan.js"></script>
 <script src="js/vendors/opnsense.js"></script>
 <script src="js/analyze.js"></script>
+<script src="js/baseline.js"></script>
 <script src="js/pdf.js"></script>
 <script src="js/app.js"></script>
 </body>

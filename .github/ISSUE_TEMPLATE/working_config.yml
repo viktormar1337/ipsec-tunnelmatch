@@ -1,0 +1,148 @@
+name: Working configuration
+description: Report a tunnel that is up and running, with the platforms and OS versions used on each side.
+title: "[Works]: "
+labels: ["working-config"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing a working combination. Reports like this show others which settings and **firmware versions** really work together.
+
+        **Never paste a pre-shared key, real public IPs or internal network ranges.** Opening this form from the tool's "Report a working configuration" button fills in the platforms and settings for you.
+
+  - type: dropdown
+    id: side-a-platform
+    attributes:
+      label: Side A platform
+      options:
+        - Microsoft Azure VPN Gateway
+        - Palo Alto Networks PAN-OS
+        - Fortinet FortiGate (FortiOS)
+        - Cisco Meraki MX
+        - Cisco IOS-XE
+        - Cisco ASA
+        - strongSwan (swanctl)
+        - OPNsense / pfSense
+    validations:
+      required: true
+
+  - type: input
+    id: side-a-version
+    attributes:
+      label: Side A OS / firmware version
+      description: Exact version, for example PAN-OS 11.1.6-h3, MX 19.2.7, FortiOS 7.4.5, IOS-XE 17.12.4, strongSwan 6.0.1. For Azure, the gateway SKU and generation (for example VpnGw2AZ, Generation 2).
+      placeholder: PAN-OS 11.1.6-h3
+    validations:
+      required: true
+
+  - type: input
+    id: side-a-model
+    attributes:
+      label: Side A model (optional)
+      placeholder: PA-3410, MX85, FG-100F, VM-Series
+
+  - type: dropdown
+    id: vpn-type-a
+    attributes:
+      label: Side A VPN type
+      options:
+        - Route-based (VTI)
+        - Policy-based
+    validations:
+      required: true
+
+  - type: dropdown
+    id: side-b-platform
+    attributes:
+      label: Side B platform
+      options:
+        - Microsoft Azure VPN Gateway
+        - Palo Alto Networks PAN-OS
+        - Fortinet FortiGate (FortiOS)
+        - Cisco Meraki MX
+        - Cisco IOS-XE
+        - Cisco ASA
+        - strongSwan (swanctl)
+        - OPNsense / pfSense
+    validations:
+      required: true
+
+  - type: input
+    id: side-b-version
+    attributes:
+      label: Side B OS / firmware version
+      description: Exact version, or SKU and generation for Azure.
+      placeholder: VpnGw2AZ, Generation 2
+    validations:
+      required: true
+
+  - type: input
+    id: side-b-model
+    attributes:
+      label: Side B model (optional)
+
+  - type: dropdown
+    id: vpn-type-b
+    attributes:
+      label: Side B VPN type
+      options:
+        - Route-based (VTI)
+        - Policy-based
+    validations:
+      required: true
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings that work
+      description: Phase 1 and phase 2 algorithms, DH/PFS groups, lifetimes and DPD, with each side's spelling. The tool's button fills this in from the Name mapping tab.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: baseline
+    attributes:
+      label: Baseline grade shown in the tool
+      options:
+        - Recommended
+        - Meets minimum
+        - Below baseline (legacy peer)
+        - Not checked
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: verified
+    attributes:
+      label: What did you verify?
+      description: Tick what you actually tested. This is the tool's go-live checklist.
+      options:
+        - label: Tunnel came up and traffic flows in both directions
+        - label: Negotiated IKE and child SAs checked on both sides and match the settings above
+        - label: Tunnel survived a phase 2 rekey
+        - label: Dead peer detection or failover tested
+        - label: Only the agreed proposal is configured; vendor defaults and unused proposals removed
+        - label: UDP 500, UDP 4500 and ESP restricted to the peer's public IP
+        - label: Pre-shared key is 32+ random characters and was shared out-of-band (or certificates are used)
+
+  - type: input
+    id: uptime
+    attributes:
+      label: Running since (optional)
+      description: How long the tunnel has been in production or in the lab.
+      placeholder: Production since 2026-09, or lab test
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Quirks and workarounds (optional)
+      description: Anything others should know, for example a setting that had to differ from the tool's output, or a firmware bug.
+
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have removed pre-shared keys, real public IPs and internal network ranges.
+          required: true

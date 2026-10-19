@@ -67,13 +67,13 @@
     if (!isGcm(S.p1enc)) return;
     const prf = gcmPrf(S.dh);
     if (S.p1enc === "aes128gcm" && S.dh !== 19)
-      add("err", `PAN-OS (side ${k}): IKE aes-128-gcm requires DH group 19.`);
+      add("err", `PAN-OS (side ${k}): IKE aes-128-gcm requires DH group 19.`, "crypto");
     if (S.p1enc === "aes256gcm" && S.dh !== 20)
-      add("warn", `PAN-OS (side ${k}): IKE aes-256-gcm should be paired with DH group 20.`);
+      add("warn", `PAN-OS (side ${k}): IKE aes-256-gcm should be paired with DH group 20.`, "crypto");
     if (prf && prf !== S.p1int)
-      add("err", `PAN-OS (side ${k}) sets authentication to non-auth with IKE GCM and derives the PRF from the DH group (${intLabel(prf)} for group ${S.dh}). Set the PRF to ${intLabel(prf)} so the peer matches.`);
+      add("err", `PAN-OS (side ${k}) sets authentication to non-auth with IKE GCM and derives the PRF from the DH group (${intLabel(prf)} for group ${S.dh}). Set the PRF to ${intLabel(prf)} so the peer matches.`, "crypto");
     if (!prf)
-      add("warn", `PAN-OS (side ${k}): the PRF used for IKE GCM with DH group ${S.dh} is not documented. Use group 19 or 20.`);
+      add("warn", `PAN-OS (side ${k}): the PRF used for IKE GCM with DH group ${S.dh} is not documented. Use group 19 or 20.`, "crypto");
   }
 
   function notes({ add }) {

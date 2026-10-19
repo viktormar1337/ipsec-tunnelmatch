@@ -28,6 +28,28 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 
 IKEv2 only: every supported platform does IKEv2.
 
+## Recommended baseline and checklist
+
+The **Recommended baseline** panel grades the chosen profile against NIST SP 800-77 Rev. 1, RFC 8247, NSA and BSI TR-02102-3 guidance:
+
+| Setting | Recommended | Minimum |
+|---|---|---|
+| IKE version | IKEv2 only | IKEv2 only |
+| Phase 1 encryption | AES-256 (GCM or CBC) | AES-128 |
+| Integrity / PRF | SHA-384 or SHA-512 | SHA-256 |
+| DH group | 19, 20 or 21 | 14 (never 1, 2, 5 or 24) |
+| Phase 2 encryption | AES-256-GCM | AES-128 / AES-CBC |
+| PFS | On, as strong as phase 1 | On |
+| Lifetimes | IKE SA ≤ 24 h, child SA ≤ 8 h | same |
+
+**Use strongest profile both sides support** tries every combination and picks the best one without algorithm errors, avoiding values that depend on firmware version when possible. PAN-OS ↔ Azure, for example, gets AES-256-GCM / SHA-384 / group 20; anything with a Meraki MX gets AES-256-CBC / SHA-256 / group 14.
+
+The **Go-live checklist** covers the things the tool cannot check (key quality, removed default proposals, restricted ports, verified SAs, rekey and failover tests). Ticks are kept in the browser and printed in the PDF.
+
+## Working configurations
+
+Got a tunnel running? Use **Report a working configuration** in the tool: it opens the [Working configuration](https://github.com/viktormar1337/ipsec-tunnelmatch/issues/new?template=working_config.yml) form with platforms and settings filled in, and you add the OS/firmware versions. Confirmed combinations are collected in [#1 Verified working configurations](https://github.com/viktormar1337/ipsec-tunnelmatch/issues/1).
+
 ## Azure Bicep
 
 The Azure output imports `ipsecPolicyType` and `trafficSelectorPolicyType` from a types file you provide (default `./types.bicep`). The page shows the exports that file needs. The shared key is read with `readEnvironmentVariable('VPN_PSK')` at deploy time.
@@ -44,11 +66,12 @@ css/style.css           all styling (colour tokens, light and dark)
 js/core.js              algorithm catalog, network helpers, vendor registry
 js/vendors/<vendor>.js  one file per platform: supported values, spelling, checks, config generator, sources
 js/analyze.js           generic checks and route-based / policy-based reconciliation
+js/baseline.js          recommended baseline, strongest common profile, go-live checklist
 js/pdf.js               PDF parameter sheet
 js/app.js               form state, rendering and wiring
 ```
 
-Scripts are plain (not ES modules) so the page works from `file://`. They share one global, `TM`, and must load in the order listed in `index.html`: core, vendors, analyze, pdf, app.
+Scripts are plain (not ES modules) so the page works from `file://`. They share one global, `TM`, and must load in the order listed in `index.html`: core, vendors, analyze, baseline, pdf, app.
 
 ### Adding or changing a vendor
 

@@ -2,7 +2,8 @@
  * IPsec Tunnelmatch – checks and traffic-selector reconciliation
  *
  * TM.analyze(S) returns:
- *   issues     [severity, text] pairs (severity: err | warn | ok | info)
+ *   issues     [severity, text, category] (severity: err | warn | ok | info;
+ *              category "crypto" for algorithm mismatches, "verify" for version-dependent values)
  *   A, B       parsed networks per side { nets, bad }
  *   eff        effective VPN type per side { mode, narrowed, switched }
  *   pairs      every local-A × local-B subnet pair
@@ -33,7 +34,7 @@
 
   function analyze(S) {
     const issues = [];
-    const add = (sev, text) => issues.push([sev, text]);
+    const add = (sev, text, cat = "") => issues.push([sev, text, cat]);
     const parsed = { A: parseSide(S.A), B: parseSide(S.B) };
     const { A, B } = parsed;
 
@@ -56,8 +57,8 @@
     const supported = (field, value, label) => SIDES.forEach((k) => {
       const v = TM.vendor(S[k].vendor);
       const group = field.replace(/^p[12]/, ""); // verify lists are keyed dh / pfs
-      if (!v.supports[field].includes(value)) add("err", `${label} is not supported by ${v.label} (side ${k}).`);
-      else if (v.verify[group] && v.verify[group].includes(value)) add("warn", `${label} on ${v.short} (side ${k}): ${v.verifyNote}`);
+      if (!v.supports[field].includes(value)) add("err", `${label} is not supported by ${v.label} (side ${k}).`, "crypto");
+      else if (v.verify[group] && v.verify[group].includes(value)) add("warn", `${label} on ${v.short} (side ${k}): ${v.verifyNote}`, "verify");
     });
     supported("p1enc", S.p1enc, "Phase 1 encryption " + encLabel(S.p1enc));
     supported("p1int", S.p1int, (isGcm(S.p1enc) ? "PRF " : "Phase 1 integrity ") + intLabel(S.p1int));
@@ -73,6 +74,8 @@
       add("warn", "SHA-1 and MD5 are weak. Choose SHA-256 or stronger.");
     if (LEGACY.dh.includes(S.dh) || LEGACY.dh.includes(S.pfs))
       add("warn", "DH groups 2 and 5 are weak. Group 14 or higher is recommended.");
+    if (S.dh === 24 || S.pfs === 24)
+      add("warn", "DH group 24 is discouraged by RFC 8247 (SHOULD NOT). Use group 14, 19 or 20.");
     if (!(S.dpdInt > 0) || !(S.dpdRetry > 0))
       add("err", "DPD interval and retries must both be positive numbers.");
 

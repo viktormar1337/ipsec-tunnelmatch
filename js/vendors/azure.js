@@ -254,7 +254,7 @@ type trafficSelectorPolicyType = {
       .filter((f) => AVM[f])
       .forEach((f) => {
         if (!AVM[f].includes(pol[f]))
-          add("err", `Azure (side ${k}): ${f} = '${pol[f]}' is not an allowed value in the AVM connection module.`);
+          add("err", `Azure (side ${k}): ${f} = '${pol[f]}' is not an allowed value in the AVM connection module.`, "crypto");
       });
 
     const mode = me.cmode || "Default";

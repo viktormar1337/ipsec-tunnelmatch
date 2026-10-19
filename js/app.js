@@ -8,6 +8,7 @@
 (function () {
   "use strict";
   const { ENC, INT, DH, PFS, isGcm, encLabel, esc, slug } = TM;
+  // TM.baseline (js/baseline.js) grades the profile and holds the go-live checklist.
   const $ = (id) => document.getElementById(id);
   const SIDES = ["A", "B"];
 
@@ -20,6 +21,7 @@
     p1enc: "aes256", p1int: "sha256", dh: 14, p1life: 28800,
     dpdInt: 10, dpdRetry: 3,
     p2enc: "aes256gcm", p2int: "aes256gcm", pfs: 14, p2life: 3600, p2kb: 102400000,
+    checklist: {},
     A: { name: "Head office", vendor: "paloalto", ip: "203.0.113.10", nets: "10.10.0.0/16\n10.20.30.0/24",
          mode: "route", iface: "ethernet1/1", tun: "tunnel.10", rg: "", gw: "", loc: "", cmode: "Default", types: "./types.bicep" },
     B: { name: "Azure prod", vendor: "azure", ip: "198.51.100.20", nets: "10.50.0.0/16",
@@ -32,6 +34,7 @@
     if (!s || !s.A || !s.B || !TM.vendor(s.A.vendor) || !TM.vendor(s.B.vendor)) s = JSON.parse(JSON.stringify(DEFAULTS));
     // Drop fields from older versions: the key is never stored, and IKEv1 is gone.
     delete s.psk; delete s.pskInPdf; delete s.ikev;
+    if (!s.checklist) s.checklist = {};
     SIDES.forEach((k) => {
       if (!s[k].types) s[k].types = "./types.bicep";
       if (!s[k].cmode) s[k].cmode = "Default";
@@ -167,6 +170,82 @@
       <tbody>${rows || `<tr><td colspan="4" class="hint">No valid networks.</td></tr>`}</tbody>`;
   }
 
+  /* ---------- recommended baseline ---------- */
+
+  const GRADE_LABEL = { rec: "Recommended", min: "Meets minimum", below: "Below baseline", manual: "Check by hand" };
+
+  function renderBaseline() {
+    const { rows, overall } = TM.baseline.evaluate(S);
+    const pill = $("baselineStatus");
+    pill.className = "pill " + overall;
+    pill.textContent = GRADE_LABEL[overall];
+
+    $("baselineTable").innerHTML = `
+      <thead><tr><th>Setting</th><th>Your choice</th><th>Guidance</th><th>Grade</th><th>Source</th></tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr>
+          <td>${esc(r.setting)}</td>
+          <td class="mono">${esc(r.value)}</td>
+          <td>${esc(r.recommendation)}${r.note ? `<span class="baseline-note">${esc(r.note)}</span>` : ""}</td>
+          <td><span class="grade ${r.status}">${GRADE_LABEL[r.status]}</span></td>
+          <td class="baseline-src">${esc(r.sources.join(", "))}</td>
+        </tr>`).join("")}
+      </tbody>`;
+  }
+
+  const PROFILE_KEYS = ["p1enc", "p1int", "dh", "p2enc", "p2int", "pfs"];
+
+  function applyStrongest() {
+    const hint = $("strongestHint");
+    const profile = TM.baseline.strongestProfile(S);
+    if (!profile) {
+      hint.textContent = "No profile works on both platforms without errors. Check the platform choices.";
+      return;
+    }
+    if (PROFILE_KEYS.every((k) => S[k] === profile[k])) {
+      hint.textContent = "This is already the strongest profile both sides support.";
+      return;
+    }
+    Object.assign(S, profile);
+    update();
+    hint.textContent = `Applied: ${encLabel(profile.p1enc)} / ${TM.intLabel(profile.p1int)} / group ${profile.dh} · ESP ${encLabel(profile.p2enc)}` +
+      `${isGcm(profile.p2enc) ? "" : " / " + TM.intLabel(profile.p2int)} · PFS group ${profile.pfs}.`;
+  }
+
+  /* ---------- go-live checklist ---------- */
+
+  function renderChecklist() {
+    $("checklistItems").innerHTML = TM.baseline.CHECKLIST.map(([id, text]) => `
+      <li><label><input type="checkbox" id="chk-${id}" data-check="${id}"${S.checklist[id] ? " checked" : ""}><span>${esc(text)}</span></label></li>`).join("");
+    updateChecklistCount();
+  }
+
+  function updateChecklistCount() {
+    const done = TM.baseline.CHECKLIST.filter(([id]) => S.checklist[id]).length;
+    $("checklistCount").textContent = `${done} of ${TM.baseline.CHECKLIST.length} done`;
+  }
+
+  /* Prefill the "working configuration" issue form with what is on screen. */
+  const REPO = "https://github.com/viktormar1337/ipsec-tunnelmatch";
+
+  function reportUrl(R) {
+    const va = TM.vendor(S.A.vendor), vb = TM.vendor(S.B.vendor);
+    const typeLabel = (e) => (e.mode === "route" ? "Route-based (VTI)" : "Policy-based");
+    const settings = TM.nameRows(S).map((r) => `${r[0]}: ${r[1]}  [A: ${r[2]} | B: ${r[3]}]`)
+      .concat([`IKE SA lifetime: ${S.p1life} s`, `Child SA lifetime: ${S.p2life} s`, `Baseline: ${GRADE_LABEL[TM.baseline.evaluate(S).overall]}`])
+      .join("\n");
+    const params = new URLSearchParams({
+      template: "working_config.yml",
+      title: `[Works]: ${va.short} ↔ ${vb.short}`,
+      "side-a-platform": va.label,
+      "side-b-platform": vb.label,
+      "vpn-type-a": typeLabel(R.eff.A),
+      "vpn-type-b": typeLabel(R.eff.B),
+      settings,
+    });
+    return `${REPO}/issues/new?${params}`;
+  }
+
   /* ---------- output tabs ---------- */
 
   let activeTab = "A";
@@ -237,18 +316,21 @@
 
   /* ---------- sources ---------- */
 
+  function sourceCard(label, s) {
+    const pill = s.status.startsWith("Verified") || s.status.startsWith("Checked") ? "ok" : "warn";
+    const links = s.links.map(([t, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(t)}</a></li>`).join("");
+    return `
+      <article class="src">
+        <div class="src-head"><strong>${esc(label)}</strong><span class="pill ${pill}">${esc(s.status)}</span></div>
+        <p class="used">${esc(s.used)}</p>
+        <ul>${links}</ul>
+      </article>`;
+  }
+
   function renderSources() {
-    $("srcGrid").innerHTML = TM.vendorIds().map((id) => {
-      const v = TM.vendor(id), s = v.sources;
-      const pill = s.status.startsWith("Verified") ? "ok" : "warn";
-      const links = s.links.map(([t, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(t)}</a></li>`).join("");
-      return `
-        <article class="src">
-          <div class="src-head"><strong>${esc(v.label)}</strong><span class="pill ${pill}">${esc(s.status)}</span></div>
-          <p class="used">${esc(s.used)}</p>
-          <ul>${links}</ul>
-        </article>`;
-    }).join("");
+    const b = TM.baseline.SOURCES;
+    $("srcGrid").innerHTML = sourceCard(b.label, b) +
+      TM.vendorIds().map((id) => sourceCard(TM.vendor(id).label, TM.vendor(id).sources)).join("");
   }
 
   /* ---------- update cycle ---------- */
@@ -260,6 +342,8 @@
     renderCrypto();
     R = TM.analyze(S);
     renderChecks(R);
+    renderBaseline();
+    $("reportLink").href = reportUrl(R);
     renderSelectors(R);
     renderTabs();
     renderOutput(R);
@@ -289,7 +373,7 @@
     button.textContent = PDF_LABEL;
 
     const filename = `IPsec-${slug(S.tunnelName)}.pdf`;
-    const pdf = TM.buildPdf(S, R);
+    const pdf = TM.buildPdf(S, R, TM.baseline.evaluate(S));
 
     if (!downloads && window.claude && window.claude.use) {
       try { downloads = await window.claude.use("downloads"); } catch (e) { downloads = null; }
@@ -368,10 +452,19 @@
       if (button) copyBlock(button);
     });
     $("pdfBtn").addEventListener("click", savePdf);
+    $("strongestBtn").addEventListener("click", applyStrongest);
+    $("checklistItems").addEventListener("change", (e) => {
+      const id = e.target.dataset.check;
+      if (!id) return;
+      S.checklist[id] = e.target.checked;
+      updateChecklistCount();
+      save();
+    });
   }
 
   SIDES.forEach((k) => { $("side" + k).innerHTML = sidePanel(k); });
   renderSources();
+  renderChecklist();
   bind();
   update();
 })();

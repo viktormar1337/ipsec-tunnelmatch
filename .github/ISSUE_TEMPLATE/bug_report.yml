@@ -1,0 +1,101 @@
+name: Bug report
+description: The tool shows something wrong, breaks, or generates config that does not work.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Never paste a pre-shared key, real public IPs or internal network ranges.** Use documentation ranges (203.0.113.0/24, 198.51.100.0/24, 192.0.2.0/24) and placeholders instead.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where is the problem?
+      options:
+        - Generated configuration
+        - Checks (wrong error, warning or missing check)
+        - Effective traffic selectors
+        - Name mapping
+        - PDF parameter sheet
+        - Azure Bicep output
+        - Page layout or display
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: side-a
+    attributes:
+      label: Side A platform
+      options:
+        - Microsoft Azure VPN Gateway
+        - Palo Alto Networks PAN-OS
+        - Fortinet FortiGate
+        - Cisco Meraki MX
+        - Cisco IOS-XE
+        - Cisco ASA
+        - strongSwan
+        - OPNsense / pfSense
+    validations:
+      required: true
+
+  - type: dropdown
+    id: side-b
+    attributes:
+      label: Side B platform
+      options:
+        - Microsoft Azure VPN Gateway
+        - Palo Alto Networks PAN-OS
+        - Fortinet FortiGate
+        - Cisco Meraki MX
+        - Cisco IOS-XE
+        - Cisco ASA
+        - strongSwan
+        - OPNsense / pfSense
+    validations:
+      required: true
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings used
+      description: VPN type per side, phase 1 and phase 2 algorithms, DH/PFS groups, lifetimes, DPD. The Name mapping tab can be copied here.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Paste the relevant generated lines or error text. Remove keys and real addresses first.
+    validations:
+      required: true
+
+  - type: input
+    id: device-version
+    attributes:
+      label: Device firmware / software version
+      description: For example PAN-OS 11.1.4, MX 19.2.7, FortiOS 7.4.5. Leave empty if not relevant.
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and where the tool was opened
+      description: For example Edge 141 on Windows, opened from GitHub Pages or as a local file.
+
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have removed pre-shared keys, real public IPs and internal network ranges.
+          required: true

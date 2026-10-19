@@ -1,0 +1,79 @@
+name: Vendor correction
+description: A platform's supported algorithms, limits or syntax in the tool are wrong or out of date.
+title: "[Vendor]: "
+labels: ["vendor-data"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The tool's rules for each platform come from vendor documentation (see the Sources section on the page). Corrections need a source so they can be verified. **Never paste keys or real addresses.**
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Microsoft Azure VPN Gateway
+        - Palo Alto Networks PAN-OS
+        - Fortinet FortiGate
+        - Cisco Meraki MX
+        - Cisco IOS-XE
+        - Cisco ASA
+        - strongSwan
+        - OPNsense / pfSense
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong?
+      multiple: true
+      options:
+        - An algorithm or group is marked unsupported but is supported
+        - An algorithm or group is allowed but is not supported
+        - A firmware or version requirement is missing or wrong
+        - A limit is wrong (lifetime, DPD, etc.)
+        - Command syntax or field name is wrong
+        - Interop behaviour (traffic selectors, GCM/PRF, etc.)
+        - Deprecation or removal
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What the tool says today
+      description: The check message, generated line or option label as shown.
+    validations:
+      required: true
+
+  - type: textarea
+    id: correct
+    attributes:
+      label: What it should say
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Software version this applies to
+      description: For example "PAN-OS 10.2 and later" or "MX 19.2+".
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: Link to the vendor documentation, release notes or CLI reference.
+      placeholder: https://
+    validations:
+      required: true
+
+  - type: textarea
+    id: tested
+    attributes:
+      label: Tested on a device? (optional)
+      description: Lab or production result, with keys and real addresses removed.

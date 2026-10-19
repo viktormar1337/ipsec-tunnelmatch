@@ -34,6 +34,39 @@ The Azure output imports `ipsecPolicyType` and `trafficSelectorPolicyType` from 
 
 ## Use
 
-Open `index.html` in a browser, or publish it with GitHub Pages. The PDF export loads jsPDF and jsPDF-AutoTable from cdnjs.
+Open `index.html` in a browser, or publish it with GitHub Pages. No build step: it also runs straight from a local folder. The PDF export loads jsPDF and jsPDF-AutoTable from cdnjs.
+
+## Project layout
+
+```
+index.html              page structure only
+css/style.css           all styling (colour tokens, light and dark)
+js/core.js              algorithm catalog, network helpers, vendor registry
+js/vendors/<vendor>.js  one file per platform: supported values, spelling, checks, config generator, sources
+js/analyze.js           generic checks and route-based / policy-based reconciliation
+js/pdf.js               PDF parameter sheet
+js/app.js               form state, rendering and wiring
+```
+
+Scripts are plain (not ES modules) so the page works from `file://`. They share one global, `TM`, and must load in the order listed in `index.html`: core, vendors, analyze, pdf, app.
+
+### Adding or changing a vendor
+
+Everything about a platform lives in its own file under `js/vendors/`. A vendor registers itself with `TM.register({...})`:
+
+| Field | Purpose |
+|---|---|
+| `id`, `order`, `label`, `short` | Identity and position in the platform list |
+| `modes` | `["route"]`, `["policy"]` or both; the first is the default |
+| `narrow` | `true` if a route-based tunnel can narrow its selectors to subnet pairs |
+| `supports` | Allowed values for `p1enc`, `p1int`, `dh`, `p2enc`, `p2int`, `pfs` (neutral ids from `core.js`) |
+| `verify`, `verifyNote` | Values that work only on some versions, with the warning to show |
+| `fields`, `defaults` | Which endpoint fields to show (with labels) and their default values |
+| `names(S)` | How the platform spells each chosen value (name mapping tab and PDF) |
+| `checks(ctx)`, `notes(ctx)` | Platform rules per side, and notes shown once per platform |
+| `generate(c)` | Returns the config as a string, or a list of `{ title, text }` blocks |
+| `sources` | Status, what was taken from the docs, and links (Sources section) |
+
+Add the new file to the script list in `index.html`, after `core.js`.
 
 Generated configuration is a starting point. Lab-test before production.

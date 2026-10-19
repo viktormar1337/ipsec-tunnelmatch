@@ -1,0 +1,1239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.5 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>IPsec Tunnelmatch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: two endpoint panels facing each other, shared crypto in the middle, checks, then per-side output tabs */
+:root{
+  --bg:#f2f4f7; --panel:#ffffff; --ink:#16202e; --muted:#586374; --line:#d5dbe4;
+  --accent:#0b6a86; --accent-soft:#e2f0f4; --accent-ink:#ffffff;
+  --code-bg:#eef2f6; --code-ink:#1b2636;
+  --ok:#1d7a46; --ok-soft:#e3f3ea; --warn:#9a5b00; --warn-soft:#fbf0dc; --err:#b42318; --err-soft:#fbe7e4;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1319; --panel:#151c25; --ink:#e3e8ef; --muted:#93a0b2; --line:#2a3442;
+  --accent:#4fb4d0; --accent-soft:#16303a; --accent-ink:#06141a;
+  --code-bg:#0a0f15; --code-ink:#d6dee8;
+  --ok:#53c48a; --ok-soft:#12291d; --warn:#e3a640; --warn-soft:#2d2210; --err:#f07468; --err-soft:#331715;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1319; --panel:#151c25; --ink:#e3e8ef; --muted:#93a0b2; --line:#2a3442;
+  --accent:#4fb4d0; --accent-soft:#16303a; --accent-ink:#06141a;
+  --code-bg:#0a0f15; --code-ink:#d6dee8;
+  --ok:#53c48a; --ok-soft:#12291d; --warn:#e3a640; --warn-soft:#2d2210; --err:#f07468; --err-soft:#331715;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-block:24px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:20px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;letter-spacing:.01em}
+h1{font-size:30px;line-height:1.1}
+h2{font-size:18px}
+h3{font-size:14px;font-family:var(--f-mono);font-weight:500}
+.lede{color:var(--muted);max-width:68ch;margin:6px 0 0}
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+.hdr-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{font-family:var(--f-mono);font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.pill.ok{color:var(--ok);background:var(--ok-soft);border-color:transparent}
+.pill.warn{color:var(--warn);background:var(--warn-soft);border-color:transparent}
+.pill.err{color:var(--err);background:var(--err-soft);border-color:transparent}
+button{font:inherit;cursor:pointer}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:6px;font-weight:600}
+.btn.ghost{background:transparent;color:var(--accent);padding:5px 12px;font-size:13px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sides{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:stretch}
+.link{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-family:var(--f-mono);font-size:11px;text-align:center}
+.link .wire{width:2px;flex:1;background:repeating-linear-gradient(var(--accent) 0 6px,transparent 6px 11px)}
+.link .badge{border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:3px 6px;background:var(--accent-soft)}
+.side-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.side-tag{font-family:var(--f-display);font-size:13px;font-weight:600;color:var(--accent-ink);background:var(--accent);border-radius:4px;padding:1px 8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.full{grid-column:1/-1}
+label{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500;min-width:0}
+input,select,textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:7px 9px;width:100%;min-width:0}
+textarea{font-family:var(--f-mono);font-size:13px;resize:vertical;min-height:62px}
+input.mono{font-family:var(--f-mono);font-size:13px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.crypto{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.crypto .panel{display:grid;gap:10px;align-content:start}
+.row-check{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink)}
+.row-check input{width:auto}
+.checks ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.checks li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:8px 10px;border-radius:6px;background:var(--bg)}
+.sev{font-family:var(--f-mono);font-size:11px;font-weight:500;border-radius:3px;padding:1px 6px;margin-top:2px;white-space:nowrap}
+.sev.err{background:var(--err-soft);color:var(--err)}
+.sev.warn{background:var(--warn-soft);color:var(--warn)}
+.sev.info{background:var(--accent-soft);color:var(--accent)}
+.sev.ok{background:var(--ok-soft);color:var(--ok)}
+.tbl-wrap{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.mono,td code{font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.tab{border:1px solid transparent;border-bottom:none;background:none;color:var(--muted);padding:8px 12px;border-radius:6px 6px 0 0;font-weight:500}
+.tab[aria-selected="true"]{background:var(--panel);color:var(--ink);border-color:var(--line);margin-bottom:-1px}
+.out{background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;padding:14px;min-width:0;display:grid;gap:16px}
+.block{display:grid;gap:8px;min-width:0}
+.block-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+pre{margin:0;background:var(--code-bg);color:var(--code-ink);font-family:var(--f-mono);font-size:12.5px;line-height:1.55;padding:14px;border-radius:6px;overflow-x:auto;tab-size:2}
+.toast{font-size:12px;color:var(--ok)}
+.explain-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.explain-grid>div{min-width:0;display:grid;gap:8px;align-content:start}
+.explain-grid p{margin:0;max-width:62ch}
+.explain code{font-family:var(--f-mono);font-size:12.5px;background:var(--code-bg);padding:0 4px;border-radius:3px}
+@media (max-width:900px){.explain-grid{grid-template-columns:1fr}}
+.src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px;margin-top:12px}
+.src{border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:grid;gap:8px;align-content:start;min-width:0;background:var(--bg)}
+.src-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.src-head strong{font-family:var(--f-display);font-size:15px}
+.src ul{margin:0;padding-left:18px;display:grid;gap:3px}
+.src li{overflow-wrap:anywhere}
+.src a{color:var(--accent)}
+.src .used{font-size:13px}
+.hdr-link{font-size:13px;color:var(--accent)}
+.meta{display:grid;grid-template-columns:2fr 1.4fr;gap:10px 12px;align-items:end}
+footer{color:var(--muted);font-size:12px;max-width:80ch}
+@media (max-width:820px){
+  .sides{grid-template-columns:1fr}
+  .link{flex-direction:row}
+  .link .wire{height:2px;width:auto;flex:1;background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 11px)}
+  .crypto,.meta{grid-template-columns:1fr}
+}
+@media (max-width:460px){.grid2{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Site-to-site · IKE/IPsec · multi-vendor</div>
+      <h1>IPsec Tunnelmatch</h1>
+      <p class="lede">Describe both endpoints and one shared crypto profile. The tool checks that both platforms support every choice, reconciles policy-based and route-based traffic selectors, and produces configuration for each side plus a parameter sheet as PDF.</p>
+    </div>
+    <div class="hdr-actions">
+      <a class="hdr-link" href="#sources">Sources</a>
+      <span id="status" class="pill">–</span>
+      <button class="btn" id="pdfBtn" type="button">Save parameter sheet (PDF)</button>
+    </div>
+  </header>
+
+  <section class="panel meta" aria-label="Document">
+    <label>Tunnel name / reference<input id="tunnelName" class="mono"></label>
+    <label>Prepared by<input id="author"></label>
+  </section>
+
+  <section class="sides" aria-label="Endpoints">
+    <div class="panel" id="sideA"></div>
+    <div class="link" aria-hidden="true"><div class="wire"></div><span class="badge" id="ikeBadge">IKEv2</span><div class="wire"></div></div>
+    <div class="panel" id="sideB"></div>
+  </section>
+
+  <section class="panel explain" aria-label="Route-based and policy-based VPNs">
+    <div class="side-head"><h2>Route-based (VTI) or policy-based?</h2><span class="eyebrow">How the VPN type field works</span></div>
+    <div class="explain-grid">
+      <div>
+        <h3>Route-based · VTI</h3>
+        <p>A <strong>Virtual Tunnel Interface</strong> is a logical interface bound to the IPsec tunnel: <code>tunnel.10</code> on PAN-OS, <code>Tunnel10</code> on Cisco, the phase 1 interface on FortiGate, an <code>xfrm</code> interface on Linux. Anything routed into it is encrypted, and decrypted traffic comes out of it like any other interface.</p>
+        <p>The traffic selectors are normally <code>0.0.0.0/0 ↔ 0.0.0.0/0</code>, so routing decides what enters the tunnel: static routes or BGP. That makes it easy to add subnets, run dynamic routing, put the tunnel in its own firewall zone and monitor it.</p>
+      </div>
+      <div>
+        <h3>Policy-based</h3>
+        <p>A policy or ACL lists exactly which local and remote networks are encrypted. Each pair becomes a traffic selector, and the peer must propose the same pairs or phase 2 fails without a useful error.</p>
+        <p>Adding a subnet means changing both sides. Meraki MX (default), ASA crypto maps and OPNsense tunnel mode work this way.</p>
+      </div>
+      <div>
+        <h3>Mixing the two</h3>
+        <p>When one side is policy-based, the route-based side has to narrow its selectors to the same subnet pairs: proxy-IDs on PAN-OS, phase 2 selectors on FortiGate, <code>usePolicyBasedTrafficSelectors</code> on Azure, <code>local_ts</code>/<code>remote_ts</code> on strongSwan.</p>
+        <p>Platforms that cannot narrow a VTI (IOS-XE, ASA, OPNsense, Meraki) are generated as policy-based instead. The table further down shows the selectors each side ends up with.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="crypto" aria-label="Crypto profile">
+    <div class="panel">
+      <div class="side-head"><h2>Phase 1 · IKE</h2><span class="eyebrow">IKEv2 only</span></div>
+      <div class="grid2">
+        <label>Lifetime (s)<input id="p1life" type="number" min="300" class="mono"></label>
+        <label>Encryption<select id="p1enc"></select></label>
+        <label><span id="p1intLabel">Integrity</span><select id="p1int"></select></label>
+        <label>DH group<select id="dh"></select></label>
+        <p class="full hint">Authentication: pre-shared key, agreed out-of-band and never entered here. Configs show <code>&lt;PSK&gt;</code> where it goes.</p>
+        <label>DPD interval (s)<input id="dpdInt" type="number" min="1" max="300" class="mono"></label>
+        <label>DPD retries<input id="dpdRetry" type="number" min="1" max="20" class="mono"></label>
+        <p class="hint full" id="dpdHint"></p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="side-head"><h2>Phase 2 · IPsec (ESP)</h2><span class="eyebrow">Tunnel mode</span></div>
+      <div class="grid2">
+        <label>Encryption<select id="p2enc"></select></label>
+        <label>Integrity<select id="p2int"></select></label>
+        <label>PFS group<select id="pfs"></select></label>
+        <label>Lifetime (s)<input id="p2life" type="number" min="300" class="mono"></label>
+        <label class="full">Lifetime (KB, 0 = off)<input id="p2kb" type="number" min="0" class="mono"></label>
+      </div>
+      <p class="hint" id="p2hint"></p>
+    </div>
+  </section>
+
+  <section class="panel checks" aria-label="Checks">
+    <div class="side-head"><h2>Checks</h2><span class="eyebrow" id="checkCount"></span></div>
+    <ul id="checks"></ul>
+  </section>
+
+  <section class="panel" aria-label="Traffic selectors">
+    <div class="side-head"><h2>Effective traffic selectors</h2><span class="eyebrow" id="tsMode"></span></div>
+    <div class="tbl-wrap"><table id="tsTable"></table></div>
+  </section>
+
+  <section aria-label="Output">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="out" id="outBody"></div>
+  </section>
+
+  <section class="panel" id="sources" aria-label="Sources">
+    <div class="side-head"><h2>Sources</h2><span class="eyebrow">Where each vendor's rules and syntax come from</span></div>
+    <p class="hint" style="max-width:80ch">“Verified” means the supported algorithms, groups and limits were checked against the vendor's own documentation on the date shown. “Syntax reference” means the commands and field names follow the linked reference, but the algorithm lists have not yet been checked against a version-specific table.</p>
+    <div class="src-grid" id="srcGrid"></div>
+  </section>
+
+  <footer>Example values are pre-filled (documentation ranges 203.0.113.0/24 and 198.51.100.0/24). Algorithm support follows current vendor documentation but varies with firmware and licensing, so lab-test before production. Azure limits follow Microsoft Learn (custom IPsec/IKE policy for S2S). Drafts are kept only in your browser.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+
+/* ---------- algorithm catalog (neutral ids) ---------- */
+const ENC=[["aes128","AES-128-CBC"],["aes192","AES-192-CBC"],["aes256","AES-256-CBC"],["aes128gcm","AES-128-GCM"],["aes256gcm","AES-256-GCM"],["3des","3DES"]];
+const INT=[["sha1","SHA-1"],["sha256","SHA-256"],["sha384","SHA-384"],["sha512","SHA-512"],["md5","MD5"]];
+const DH=[[2,"Group 2 · MODP 1024"],[5,"Group 5 · MODP 1536"],[14,"Group 14 · MODP 2048"],[15,"Group 15 · MODP 3072"],[19,"Group 19 · ECP 256"],[20,"Group 20 · ECP 384"],[21,"Group 21 · ECP 521"],[24,"Group 24 · MODP 2048/256"]];
+const PFS=[[0,"No PFS"]].concat(DH);
+const isGcm=e=>e.endsWith("gcm");
+const encLabel=id=>(ENC.find(x=>x[0]===id)||[,id])[1];
+const intLabel=id=>(INT.find(x=>x[0]===id)||[,id])[1];
+const dhLabel=n=>n===0?"None":"Group "+n;
+const LEGACY={enc:["3des"],int:["md5","sha1"],dh:[2,5]};
+const ALL_ENC=ENC.map(x=>x[0]),ALL_INT=INT.map(x=>x[0]),ALL_DH=DH.map(x=>x[0]);
+
+/* ---------- vendor capability table ---------- */
+const V={
+  azure:{label:"Microsoft Azure VPN Gateway",short:"Azure",modes:["route"],narrow:true,
+    p1enc:["aes128","aes192","aes256","aes128gcm","aes256gcm"],p1int:["sha1","sha256","sha384","md5"],dh:[2,14,19,20,24],
+    p2enc:["aes128","aes192","aes256","aes128gcm","aes256gcm","3des"],p2int:["sha1","sha256","md5"],pfs:[0,2,14,19,20,24],verify:{}},
+  paloalto:{label:"Palo Alto Networks PAN-OS",short:"PAN-OS",modes:["route"],narrow:true,
+    p1enc:ALL_ENC,p1int:ALL_INT,dh:[2,5,14,15,19,20,21],p2enc:ALL_ENC,p2int:ALL_INT,pfs:[0,2,5,14,15,19,20,21],
+    verify:{dh:[15,21],pfs:[15,21]},verifyNote:"DH groups 15, 16 and 21 require PAN-OS 10.2 or later."},
+  fortigate:{label:"Fortinet FortiGate (FortiOS)",short:"FortiGate",modes:["route"],narrow:true,
+    p1enc:ALL_ENC,p1int:ALL_INT,dh:[2,5,14,15,19,20,21],p2enc:ALL_ENC,p2int:ALL_INT,pfs:[0,2,5,14,15,19,20,21],verify:{}},
+  meraki:{label:"Cisco Meraki MX",short:"Meraki MX",modes:["policy","route"],narrow:false,
+    p1enc:["aes128","aes192","aes256","3des"],p1int:["sha1","sha256","md5"],dh:[2,5,14,15,21],
+    p2enc:["aes128","aes192","aes256","3des"],p2int:["sha1","sha256","md5"],pfs:[0,2,5,14,15,21],
+    verify:{dh:[15,21],pfs:[15,21]},verifyNote:"DH groups 15 and 21 require MX 19.2 or later."},
+  iosxe:{label:"Cisco IOS-XE",short:"IOS-XE",modes:["route","policy"],narrow:false,
+    p1enc:ALL_ENC,p1int:ALL_INT,dh:ALL_DH,p2enc:ALL_ENC,p2int:ALL_INT,pfs:[0].concat(ALL_DH),verify:{}},
+  asa:{label:"Cisco ASA",short:"ASA",modes:["policy","route"],narrow:false,
+    p1enc:ALL_ENC,p1int:ALL_INT,dh:[2,5,14,15,19,20,21,24],p2enc:ALL_ENC,p2int:ALL_INT,pfs:[0,2,5,14,15,19,20,21,24],
+    verify:{dh:[2,5,24],pfs:[2,5,24]},verifyNote:"Newer ASA releases have removed DH 2, 5 and 24."},
+  strongswan:{label:"strongSwan (swanctl)",short:"strongSwan",modes:["route","policy"],narrow:true,
+    p1enc:ALL_ENC,p1int:ALL_INT,dh:ALL_DH,p2enc:ALL_ENC,p2int:ALL_INT,pfs:[0].concat(ALL_DH),verify:{}},
+  opnsense:{label:"OPNsense / pfSense",short:"OPNsense/pfSense",modes:["policy","route"],narrow:false,
+    p1enc:ALL_ENC,p1int:ALL_INT,dh:ALL_DH,p2enc:ALL_ENC,p2int:ALL_INT,pfs:[0].concat(ALL_DH),verify:{}}
+};
+const VORDER=["azure","paloalto","fortigate","meraki","iosxe","asa","strongswan","opnsense"];
+const IFACE_DEF={paloalto:"ethernet1/1",fortigate:"wan1",iosxe:"GigabitEthernet1",asa:"outside",strongswan:"",opnsense:"WAN",meraki:"",azure:""};
+const TUN_DEF={paloalto:"tunnel.10",fortigate:"",iosxe:"Tunnel10",asa:"Tunnel10",strongswan:"10",opnsense:"10",meraki:"",azure:""};
+
+/* ---------- vendor spellings ---------- */
+const OPN_DH={2:"2 (1024 bits)",5:"5 (1536 bits)",14:"14 (2048 bits)",15:"15 (3072 bits)",19:"19 (nist ecp256)",20:"20 (nist ecp384)",21:"21 (nist ecp521)",24:"24 (2048(sub 256) bits)"};
+const SW_DH={2:"modp1024",5:"modp1536",14:"modp2048",15:"modp3072",19:"ecp256",20:"ecp384",21:"ecp521",24:"modp2048s256"};
+const N={
+  azure:{enc:{aes128:"AES128",aes192:"AES192",aes256:"AES256",aes128gcm:"GCMAES128",aes256gcm:"GCMAES256","3des":"DES3"},
+    int:{sha1:"SHA1",sha256:"SHA256",sha384:"SHA384",sha512:"SHA512",md5:"MD5"},
+    dh:{2:"DHGroup2",14:"DHGroup14",19:"ECP256",20:"ECP384",24:"DHGroup24"},
+    pfs:{0:"None",2:"PFS2",14:"PFS2048",19:"ECP256",20:"ECP384",24:"PFS24"}},
+  paloalto:{enc:{aes128:"aes-128-cbc",aes192:"aes-192-cbc",aes256:"aes-256-cbc",aes128gcm:"aes-128-gcm",aes256gcm:"aes-256-gcm","3des":"3des"},
+    int:{sha1:"sha1",sha256:"sha256",sha384:"sha384",sha512:"sha512",md5:"md5"},dh:n=>"group"+n,pfs:n=>n?"group"+n:"no-pfs"},
+  fortigate:{enc:{aes128:"aes128",aes192:"aes192",aes256:"aes256",aes128gcm:"aes128gcm",aes256gcm:"aes256gcm","3des":"3des"},
+    int:{sha1:"sha1",sha256:"sha256",sha384:"sha384",sha512:"sha512",md5:"md5"},dh:n=>String(n),pfs:n=>n?String(n):"pfs disable"},
+  meraki:{enc:{aes128:"AES 128",aes192:"AES 192",aes256:"AES 256","3des":"3DES"},int:{sha1:"SHA1",sha256:"SHA256",md5:"MD5"},
+    dh:n=>"Group "+n,pfs:n=>n?"Group "+n:"Off"},
+  iosxe:{enc1:{aes128:"aes 128",aes192:"aes 192",aes256:"aes 256","3des":"3des"},
+    enc:{aes128:"aes-cbc-128",aes192:"aes-cbc-192",aes256:"aes-cbc-256",aes128gcm:"aes-gcm-128",aes256gcm:"aes-gcm-256","3des":"3des"},
+    int:{sha1:"sha1",sha256:"sha256",sha384:"sha384",sha512:"sha512",md5:"md5"},
+    esp:{aes128:"esp-aes 128",aes192:"esp-aes 192",aes256:"esp-aes 256",aes128gcm:"esp-gcm 128",aes256gcm:"esp-gcm 256","3des":"esp-3des"},
+    espi:{sha1:"esp-sha-hmac",sha256:"esp-sha256-hmac",sha384:"esp-sha384-hmac",sha512:"esp-sha512-hmac",md5:"esp-md5-hmac"},
+    dh:n=>"group "+n,pfs:n=>n?"group"+n:"(no set pfs)"},
+  asa:{enc:{aes128:"aes",aes192:"aes-192",aes256:"aes-256",aes128gcm:"aes-gcm",aes256gcm:"aes-gcm-256","3des":"3des"},
+    int:{sha1:"sha",sha256:"sha256",sha384:"sha384",sha512:"sha512",md5:"md5"},
+    espi:{sha1:"sha-1",sha256:"sha-256",sha384:"sha-384",sha512:"sha-512",md5:"md5"},
+    ts1:{aes128:"esp-aes",aes192:"esp-aes-192",aes256:"esp-aes-256","3des":"esp-3des"},
+    ts1i:{sha1:"esp-sha-hmac",sha256:"esp-sha-256-hmac",sha384:"esp-sha-384-hmac",sha512:"esp-sha-512-hmac",md5:"esp-md5-hmac"},
+    dh:n=>"group "+n,pfs:n=>n?"group"+n:"(no set pfs)"},
+  strongswan:{enc:{aes128:"aes128",aes192:"aes192",aes256:"aes256",aes128gcm:"aes128gcm16",aes256gcm:"aes256gcm16","3des":"3des"},
+    int:{sha1:"sha1",sha256:"sha256",sha384:"sha384",sha512:"sha512",md5:"md5"},dh:SW_DH,pfs:n=>n?SW_DH[n]:"(none)"},
+  opnsense:{enc:{aes128:"AES 128 bits",aes192:"AES 192 bits",aes256:"AES 256 bits",aes128gcm:"AES128-GCM16",aes256gcm:"AES256-GCM16","3des":"3DES"},
+    int:{sha1:"SHA1",sha256:"SHA256",sha384:"SHA384",sha512:"SHA512",md5:"MD5"},dh:n=>OPN_DH[n],pfs:n=>n?OPN_DH[n]:"off"}
+};
+function nm(v,kind,val){const t=N[v][kind];if(!t)return "–";const r=typeof t==="function"?t(val):t[val];return r==null?"(not supported)":r}
+
+/* ---------- networks ---------- */
+function parseCidr(s){
+  const m=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(s.trim());if(!m)return null;
+  const o=m.slice(1,5).map(Number),p=+m[5];if(o.some(x=>x>255)||p>32)return null;
+  const ip=((o[0]<<24)>>>0)+(o[1]<<16)+(o[2]<<8)+o[3];
+  const mask=p===0?0:(0xffffffff<<(32-p))>>>0;
+  return {text:s.trim(),ip,prefix:p,mask,net:(ip&mask)>>>0}
+}
+const i2s=n=>[n>>>24,(n>>>16)&255,(n>>>8)&255,n&255].join(".");
+const maskStr=c=>i2s(c.mask),wild=c=>i2s((~c.mask)>>>0),netStr=c=>i2s(c.net);
+const overlap=(a,b)=>{const m=Math.min(a.prefix,b.prefix);const mk=m===0?0:(0xffffffff<<(32-m))>>>0;return ((a.net&mk)>>>0)===((b.net&mk)>>>0)};
+const validIp=s=>/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(s.trim())&&s.trim().split(".").every(x=>+x<=255);
+const slug=s=>(s||"peer").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,24)||"peer";
+
+/* ---------- state ---------- */
+const KEY="ipsec-tunnelmatch-v2";
+const DEFAULTS={
+  tunnelName:"HQ-AZURE-PROD-01",author:"",
+  ikev:"2",p1enc:"aes256",p1int:"sha256",dh:14,p1life:28800,dpdInt:10,dpdRetry:3,
+  p2enc:"aes256gcm",p2int:"aes256gcm",pfs:14,p2life:3600,p2kb:102400000,
+  A:{name:"Head office",vendor:"paloalto",ip:"203.0.113.10",nets:"10.10.0.0/16\n10.20.30.0/24",mode:"route",iface:"ethernet1/1",tun:"tunnel.10",rg:"",gw:"",loc:""},
+  B:{name:"Azure prod",vendor:"azure",ip:"198.51.100.20",nets:"10.50.0.0/16",mode:"route",iface:"",tun:"",rg:"rg-network-prod",gw:"vgw-hub-prod",loc:"swedencentral"}
+};
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+if(!S||!S.A||!S.B)S=JSON.parse(JSON.stringify(DEFAULTS));
+delete S.psk;delete S.pskInPdf;
+["A","B"].forEach(k=>{if(!S[k].types)S[k].types="./types.bicep";if(!S[k].cmode)S[k].cmode="Default"});
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const PSK="<PSK>"; // never collected; exchanged out-of-band
+const azureDpd=()=>Math.min(3600,Math.max(9,(S.dpdInt||0)*(S.dpdRetry||0)));
+/* allowed values copied from avm/res/network/connection 0.1.7 (customIPSecPolicyType and @allowed params) */
+const AVM={
+  ipsecEncryption:["None","DES","DES3","AES128","AES192","AES256","GCMAES128","GCMAES192","GCMAES256"],
+  ipsecIntegrity:["MD5","SHA1","SHA256","GCMAES128","GCMAES192","GCMAES256"],
+  ikeEncryption:["DES","DES3","AES128","AES192","AES256","GCMAES256","GCMAES128"],
+  ikeIntegrity:["MD5","SHA1","SHA256","SHA384","GCMAES256","GCMAES128"],
+  dhGroup:["None","DHGroup1","DHGroup2","DHGroup14","DHGroup2048","ECP256","ECP384","DHGroup24"],
+  pfsGroup:["None","PFS1","PFS2","PFS2048","ECP256","ECP384","PFS24","PFS14","PFSMM"],
+  connectionMode:["Default","InitiatorOnly","ResponderOnly"],
+  connectionProtocol:["IKEv1","IKEv2"]
+};
+function azurePolicy(){const n=N.azure,g2=isGcm(S.p2enc);return {
+  saLifeTimeSeconds:S.p2life,saDataSizeKilobytes:S.p2kb||102400000,
+  ipsecEncryption:n.enc[S.p2enc]||"(not supported)",ipsecIntegrity:g2?n.enc[S.p2enc]:(n.int[S.p2int]||"(not supported)"),
+  ikeEncryption:n.enc[S.p1enc]||"(not supported)",ikeIntegrity:n.int[S.p1int]||"(not supported)",
+  dhGroup:n.dh[S.dh]||"(not supported)",pfsGroup:n.pfs[S.pfs]||"(not supported)"}}
+
+/* ---------- side panels ---------- */
+function sideHtml(k){
+  const opts=VORDER.map(v=>`<option value="${v}">${V[v].label}</option>`).join("");
+  return `<div class="side-head"><h2 id="h${k}">Side ${k}</h2><span class="side-tag">${k}</span></div>
+  <div class="grid2">
+    <label class="full">Platform<select id="${k}vendor">${opts}</select></label>
+    <label>Site / organisation<input id="${k}name"></label>
+    <label>Public IP<input id="${k}ip" class="mono" inputmode="decimal"></label>
+    <label class="full">Local networks (one CIDR per line)<textarea id="${k}nets" rows="3" spellcheck="false"></textarea></label>
+    <label>VPN type<select id="${k}mode"><option value="route">Route-based (VTI)</option><option value="policy">Policy-based</option></select></label>
+    <label id="${k}ifaceL">WAN interface<input id="${k}iface" class="mono"></label>
+    <label id="${k}tunL"><span id="${k}tunT">Tunnel interface</span><input id="${k}tun" class="mono"></label>
+    <label id="${k}rgL">Resource group<input id="${k}rg" class="mono"></label>
+    <label id="${k}gwL">VPN gateway name<input id="${k}gw" class="mono"></label>
+    <label id="${k}locL">Region<input id="${k}loc" class="mono"></label>
+    <label id="${k}cmodeL">Connection mode<select id="${k}cmode"><option>Default</option><option>InitiatorOnly</option><option>ResponderOnly</option></select></label>
+    <label id="${k}typesL">Bicep types file (required)<input id="${k}types" class="mono" placeholder="./types.bicep"></label>
+  </div>
+  <p class="hint" id="${k}vhint" style="margin-top:8px"></p>`;
+}
+$("sideA").innerHTML=sideHtml("A");$("sideB").innerHTML=sideHtml("B");
+
+function fillSelect(el,list,val){el.innerHTML=list.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");el.value=String(val)}
+
+function bind(){
+  ["tunnelName","author"].forEach(id=>{$(id).value=S[id];$(id).addEventListener("input",()=>{S[id]=$(id).value;update()})});
+  ["p1life","dpdInt","dpdRetry","p2life","p2kb"].forEach(id=>{$(id).value=S[id];$(id).addEventListener("input",()=>{S[id]=+$(id).value;update()})});
+  S.ikev="2"; // IKEv1 removed: every supported platform does IKEv2
+  ["p1enc","p1int","p2enc","p2int"].forEach(id=>$(id).addEventListener("change",()=>{S[id]=$(id).value;update()}));
+  ["dh","pfs"].forEach(id=>$(id).addEventListener("change",()=>{S[id]=+$(id).value;update()}));
+  ["A","B"].forEach(k=>{
+    ["name","ip","nets","iface","tun","rg","gw","loc","types","cmode","mode"].forEach(f=>{const el=$(k+f);el.value=S[k][f]||"";el.addEventListener(f==="mode"||f==="cmode"?"change":"input",()=>{S[k][f]=el.value;update()})});
+    const vs=$(k+"vendor");vs.value=S[k].vendor;
+    vs.addEventListener("change",()=>{const v=vs.value;S[k].vendor=v;
+      if(!V[v].modes.includes(S[k].mode))S[k].mode=V[v].modes[0];
+      S[k].iface=IFACE_DEF[v];S[k].tun=TUN_DEF[v];$(k+"iface").value=S[k].iface;$(k+"tun").value=S[k].tun;update()});
+  });
+}
+
+function supportNote(field,val){
+  const miss=["A","B"].filter(k=>!V[S[k].vendor][field].includes(val)).map(k=>V[S[k].vendor].short);
+  return miss.length?"  ✕ "+miss.join(", "):"";
+}
+function renderCryptoSelects(){
+  if(isGcm(S.p2enc))S.p2int=S.p2enc;else if(isGcm(S.p2int))S.p2int="sha256";
+  fillSelect($("p1enc"),ENC.map(([v,l])=>[v,l+supportNote("p1enc",v)]),S.p1enc);
+  fillSelect($("p1int"),INT.map(([v,l])=>[v,l+supportNote("p1int",v)]),S.p1int);
+  fillSelect($("dh"),DH.map(([v,l])=>[v,l+supportNote("dh",v)]),S.dh);
+  fillSelect($("p2enc"),ENC.map(([v,l])=>[v,l+supportNote("p2enc",v)]),S.p2enc);
+  const p2i=isGcm(S.p2enc)?[[S.p2enc,encLabel(S.p2enc)+" (built in)"]]:INT.map(([v,l])=>[v,l+supportNote("p2int",v)]);
+  fillSelect($("p2int"),p2i,S.p2int);$("p2int").disabled=isGcm(S.p2enc);
+  fillSelect($("pfs"),PFS.map(([v,l])=>[v,l+(v?supportNote("pfs",v):"")]),S.pfs);
+  $("p1intLabel").textContent=isGcm(S.p1enc)?"PRF (GCM provides integrity)":"Integrity / PRF";
+  $("p2hint").textContent=isGcm(S.p2enc)?"GCM provides both encryption and integrity in ESP. Azure requires the same GCM value for IPsec encryption and integrity.":"";
+  const az=S.A.vendor==="azure"||S.B.vendor==="azure";
+  $("dpdHint").textContent=`Dead peer declared after about ${S.dpdInt*S.dpdRetry} s.`+(az?` Azure has no retry count: dpdTimeoutSeconds = interval × retries = ${azureDpd()} s.`:"");
+}
+
+/* ---------- reconciliation ---------- */
+function analyze(){
+  const out={issues:[],eff:{}};
+  const add=(sev,t)=>out.issues.push([sev,t]);
+  const side=k=>{const s=S[k];const raw=s.nets.split(/[\n,]+/).map(x=>x.trim()).filter(Boolean);
+    const nets=[],bad=[];raw.forEach(r=>{const c=parseCidr(r);c?nets.push(c):bad.push(r)});return {s,v:V[s.vendor],nets,bad}};
+  const A=side("A"),B=side("B");
+  ["A","B"].forEach(k=>{const x=k==="A"?A:B;
+    if(x.bad.length)add("err",`Side ${k}: invalid CIDR: ${x.bad.join(", ")}`);
+    x.nets.forEach(c=>{if(c.ip!==c.net)add("warn",`Side ${k}: ${c.text} is not a network address (becomes ${netStr(c)}/${c.prefix}).`)});
+    if(!x.nets.length)add("err",`Side ${k}: no local networks entered.`);
+    if(!validIp(x.s.ip))add("err",`Side ${k}: public IP is missing or invalid.`);
+  });
+  A.nets.forEach(a=>B.nets.forEach(b=>{if(overlap(a,b))add("err",`Overlapping networks: ${a.text} (A) and ${b.text} (B). NAT is needed before this tunnel can work.`)}));
+  if(S.A.ip&&S.A.ip===S.B.ip)add("err","Both sides have the same public IP.");
+
+  const chk=(field,val,label)=>["A","B"].forEach(k=>{const v=V[S[k].vendor],vk=field.replace(/^p[12]/,"");
+    if(!v[field].includes(val))add("err",`${label} is not supported by ${v.label} (side ${k}).`);
+    else if(v.verify[vk]&&v.verify[vk].includes(val))add("warn",`${label} on ${v.short} (side ${k}): ${v.verifyNote}`)});
+  chk("p1enc",S.p1enc,"Phase 1 encryption "+encLabel(S.p1enc));
+  chk("p1int",S.p1int,(isGcm(S.p1enc)?"PRF ":"Phase 1 integrity ")+intLabel(S.p1int));
+  chk("dh",S.dh,"DH group "+S.dh);
+  chk("p2enc",S.p2enc,"Phase 2 encryption "+encLabel(S.p2enc));
+  if(!isGcm(S.p2enc))chk("p2int",S.p2int,"Phase 2 integrity "+intLabel(S.p2int));
+  if(S.pfs)chk("pfs",S.pfs,"PFS group "+S.pfs);
+
+  if(S.ikev==="1"&&isGcm(S.p1enc))add("err","AES-GCM in phase 1 requires IKEv2. Choose CBC or switch to IKEv2.");
+  if(S.ikev==="1"&&isGcm(S.p2enc))add("warn","ESP with GCM over IKEv1 is not supported on every platform (for example ASA). IKEv2 is recommended.");
+  if(LEGACY.enc.includes(S.p1enc)||LEGACY.enc.includes(S.p2enc))add("warn","3DES is deprecated and is being removed in newer firmware (for example Meraki MX 27.1).");
+  if(LEGACY.int.includes(S.p1int)||(!isGcm(S.p2enc)&&LEGACY.int.includes(S.p2int)))add("warn","SHA-1 and MD5 are weak. Choose SHA-256 or stronger.");
+  if(LEGACY.dh.includes(S.dh)||LEGACY.dh.includes(S.pfs))add("warn","DH groups 2 and 5 are weak. Group 14 or higher is recommended.");
+  if(S.ikev==="1")add("info","IKEv1 in use. Aggressive mode is never generated (Meraki and others do not support it).");
+  if(!(S.dpdInt>0)||!(S.dpdRetry>0))add("err","DPD interval and retries must both be positive numbers.");
+
+  const vendors=[S.A.vendor,S.B.vendor];
+  ["A","B"].forEach(k=>{if(S[k].vendor!=="paloalto")return;
+    if(isGcm(S.p1enc)){
+      const prf=S.dh<=19?"sha256":S.dh===20?"sha384":null;
+      if(S.p1enc==="aes128gcm"&&S.dh!==19)add("err",`PAN-OS (side ${k}): IKE aes-128-gcm requires DH group 19.`);
+      if(S.p1enc==="aes256gcm"&&S.dh!==20)add("warn",`PAN-OS (side ${k}): IKE aes-256-gcm should be paired with DH group 20.`);
+      if(prf&&prf!==S.p1int)add("err",`PAN-OS (side ${k}) sets authentication to non-auth with IKE GCM and derives the PRF from the DH group (${intLabel(prf)} for group ${S.dh}). Set the PRF to ${intLabel(prf)} so the peer matches.`);
+      if(!prf)add("warn",`PAN-OS (side ${k}): the PRF used for IKE GCM with DH group ${S.dh} is not documented. Use group 19 or 20.`);
+    }
+    if(S.ikev==="1"&&([15,21].includes(S.dh)||[15,21].includes(S.pfs)))add("err",`PAN-OS (side ${k}): DH groups 15, 16 and 21 are only available with IKEv2.`);
+  });
+  ["A","B"].forEach(k=>{if(S[k].vendor!=="meraki")return;
+    const many=A.nets.length>1||B.nets.length>1;
+    if(S.ikev==="2"&&many&&S[k].mode==="policy")add("warn",`Meraki MX (side ${k}) with IKEv2 sends a single traffic selector holding all local and remote subnets. Peers that expect one selector pair per SA (PAN-OS proxy-IDs, ASA crypto maps and others) will not match it. Summarize to one subnet per side, or use route-based on the MX (MX 19.2.7 or later).`);
+  });
+  if(vendors.includes("meraki"))add("info","Meraki MX: DPD interval and retries are fixed by the platform and cannot be set in Dashboard.");
+  if(vendors.includes("iosxe")||vendors.includes("asa"))add("info","Cisco IOS-XE and ASA take a retry interval in seconds, not a retry count. The generated config uses the DPD interval for both values; the number of attempts is fixed by the platform.");
+  if(vendors.includes("strongswan"))add("info","strongSwan: retries come from the global charon.retransmit_tries setting, shown as a comment in the output.");
+  if(S.ikev==="2"&&vendors.includes("paloalto"))add("info","PAN-OS with IKEv2 uses a liveness check: the interval is configurable (default 5 s) and the firewall retransmits up to 10 times. The retry count only applies to IKEv1 gateways.");
+
+  ["A","B"].forEach(k=>{if(S[k].vendor!=="azure")return;
+    if(S.p1life!==28800)add("warn",`Azure (side ${k}) always uses 28,800 s for the IKE SA. Lifetimes need not match, but set the peer to 28,800 to avoid rekey collisions.`);
+    if(S.p2life<300)add("err","Azure requires a phase 2 lifetime of at least 300 s.");
+    if(S.p2kb&&S.p2kb<1024)add("err","Azure requires a phase 2 lifetime of at least 1,024 KB (or 0 for the default).");
+    const raw=S.dpdInt*S.dpdRetry;
+    if(raw<9||raw>3600)add("err",`Azure DPD timeout must be 9–3600 s; interval × retries is ${raw} s.`);
+    else if(raw<30||raw>45)add("warn",`Azure DPD timeout becomes ${raw} s. Microsoft recommends 30–45 s.`);
+    if(!(S[k].types||"").trim())add("err",`Azure (side ${k}): a Bicep types file is required. main.bicep imports ipsecPolicyType and trafficSelectorPolicyType from it.`);
+    else if(!/\.bicep$/.test(S[k].types.trim())&&!/^br[:\/]/.test(S[k].types.trim()))add("warn",`Azure (side ${k}): the types file path should point to a .bicep file (or a br: registry reference).`);
+    const pol=azurePolicy();
+    Object.keys(pol).filter(f=>AVM[f]).forEach(f=>{if(!AVM[f].includes(pol[f]))add("err",`Azure (side ${k}): ${f} = '${pol[f]}' is not an allowed value in the AVM connection module.`)});
+    if(!AVM.connectionMode.includes(S[k].cmode||"Default"))add("err",`Azure (side ${k}): connectionMode must be Default, InitiatorOnly or ResponderOnly.`);
+    if(S[k].cmode&&S[k].cmode!=="Default")add("info",`Azure (side ${k}) is ${S[k].cmode}: ${S[k].cmode==="InitiatorOnly"?"Azure starts the tunnel and never answers the peer's attempts.":"the peer must start the tunnel; Azure only responds."}`);
+    add("info","Azure: custom IPsec/IKE policy requires VpnGw1–5/AZ (or Standard/HighPerformance). The Basic SKU does not support it.");
+  });
+  if(S.A.vendor==="azure"&&S.B.vendor==="azure")add("info","Azure to Azure: consider a VNet-to-VNet connection instead. Both connections need the same policy.");
+
+  const mode=k=>V[S[k].vendor].modes.includes(S[k].mode)?S[k].mode:V[S[k].vendor].modes[0];
+  const mA=mode("A"),mB=mode("B");
+  const pairs=[];A.nets.forEach(a=>B.nets.forEach(b=>pairs.push([a,b])));
+  out.eff.A={mode:mA,narrowed:false,switched:false};out.eff.B={mode:mB,narrowed:false,switched:false};
+  const fix=(r,p)=>{const v=V[S[r].vendor];
+    if(v.narrow){out.eff[r].narrowed=true;
+      add("ok",`Side ${p} is policy-based and side ${r} is route-based. Side ${r} (${v.short}) gets narrow traffic selectors, one per subnet pair (${pairs.length}), instead of 0.0.0.0/0.`+(S[r].vendor==="azure"?" Azure: usePolicyBasedTrafficSelectors = true.":""));}
+    else{out.eff[r].mode="policy";out.eff[r].switched=true;
+      add("warn",`Side ${r} (${v.short}) cannot narrow selectors on a route-based interface, so its config is generated as policy-based to match side ${p}.`);}
+  };
+  if(mA==="policy"&&mB==="route")fix("B","A");
+  else if(mB==="policy"&&mA==="route")fix("A","B");
+  const anyAny=out.eff.A.mode==="route"&&out.eff.B.mode==="route"&&!out.eff.A.narrowed&&!out.eff.B.narrowed;
+  out.selectors=anyAny?null:pairs;
+  if(!anyAny&&pairs.length>1&&(vendors.includes("meraki")||vendors.includes("asa")))
+    add("info",`Policy-based with ${pairs.length} subnet pairs: each pair becomes its own phase 2 SA. Check that the peer allows several SAs toward the same peer.`);
+  if(anyAny)add("ok","Both sides route-based: selectors 0.0.0.0/0 ↔ 0.0.0.0/0; routing decides what enters the tunnel.");
+  out.A=A;out.B=B;out.pairs=pairs;
+  return out;
+}
+
+/* ---------- generators ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function ctxFor(k,R){const o=k==="A"?"B":"A";return {k,me:S[k],peer:S[o],local:R[k].nets,remote:R[o].nets,eff:R.eff[k],
+  pairs:R.pairs.map(p=>k==="A"?p:[p[1],p[0]]),anyAny:!R.selectors,name:slug(S[o].name).toUpperCase()}}
+
+const GEN={};
+GEN.azure=c=>{
+  const n=N.azure,g2=isGcm(S.p2enc),pol=azurePolicy();
+  const usePB=c.eff.narrowed;
+  const lower=c.name.toLowerCase(),lng="lng-"+lower,con="cn-"+lower,file=lower+".bicepparam";
+  const rg=c.me.rg||"<resource-group>",typesPath=(c.me.types||"").trim()||"<types-file>";
+  const tsp=usePB?c.pairs.map(([l,r])=>`  {
+    localAddressRanges: [
+      '${l.text}'
+    ]
+    remoteAddressRanges: [
+      '${r.text}'
+    ]
+  }`).join("\n"):"";
+  const params=`using './main.bicep'
+
+// Side ${c.k}: Azure VPN Gateway → ${c.peer.name} (${V[c.peer.vendor].short})
+// Parameter names and allowed values follow avm/res/network/connection 0.1.7
+param vpnGatewayName = '${c.me.gw||"<vpn-gateway>"}'
+param location = '${c.me.loc||"<region>"}'
+param localNetworkGatewayName = '${lng}'
+param name = '${con}'
+
+// The peer, represented as a local network gateway
+param peerPublicIp = '${c.peer.ip}'
+param peerAddressPrefixes = [
+${c.remote.map(r=>`  '${r.text}'`).join("\n")}
+]
+
+// Keep the key out of source control: set VPN_PSK before deploying,
+// or swap for az.getSecret('<sub-id>', '<kv-rg>', '<kv-name>', '<secret-name>')
+param vpnSharedKey = readEnvironmentVariable('VPN_PSK')
+
+param connectionType = 'IPsec'
+param connectionMode = '${c.me.cmode||"Default"}'
+param connectionProtocol = 'IKEv${S.ikev}'
+param dpdTimeoutSeconds = ${azureDpd()} // interval ${S.dpdInt} s × ${S.dpdRetry} retries
+param usePolicyBasedTrafficSelectors = ${usePB}
+param trafficSelectorPolicies = [${usePB?"\n"+tsp+"\n":""}]
+
+param customIPSecPolicy = {
+  saLifeTimeSeconds: ${pol.saLifeTimeSeconds}
+  saDataSizeKilobytes: ${pol.saDataSizeKilobytes}
+  ipsecEncryption: '${pol.ipsecEncryption}'
+  ipsecIntegrity: '${pol.ipsecIntegrity}'
+  ikeEncryption: '${pol.ikeEncryption}'
+  ikeIntegrity: '${pol.ikeIntegrity}'${isGcm(S.p1enc)?" // used as PRF with GCM":""}
+  dhGroup: '${pol.dhGroup}'
+  pfsGroup: '${pol.pfsGroup}'
+}
+
+// Deploy:
+//   export VPN_PSK='<pre-shared key>'        (PowerShell: $env:VPN_PSK = '...')
+//   az deployment group create -g ${rg} --parameters ${file}
+// The IKE SA lifetime is fixed at 28,800 s on Azure VPN gateways.`;
+  const tpl=`// main.bicep: local network gateway + IPsec connection on an existing VPN gateway.
+// Connection parameters mirror avm/res/network/connection 0.1.7 (names, @allowed, ranges).
+import { ipsecPolicyType, trafficSelectorPolicyType } from '${typesPath}'
+
+@description('Required. Name of the existing route-based VPN gateway (VpnGw1+ SKU).')
+param vpnGatewayName string
+
+@description('Optional. Location for all resources.')
+param location string = resourceGroup().location
+
+@description('Required. Name of the local network gateway that represents the peer.')
+param localNetworkGatewayName string
+
+@description('Required. Remote connection name.')
+param name string
+
+@description('Required. Public IP of the peer VPN device.')
+param peerPublicIp string
+
+@description('Required. Address prefixes behind the peer.')
+param peerAddressPrefixes string[]
+
+@description('Required. VPN shared key. The same value has to be specified on both sides.')
+@secure()
+param vpnSharedKey string
+
+@description('Optional. Gateway connection type.')
+@allowed([
+  'IPsec'
+])
+param connectionType string = 'IPsec'
+
+@description('Optional. The connection mode for this connection.')
+@allowed([
+  'Default'
+  'InitiatorOnly'
+  'ResponderOnly'
+])
+param connectionMode string = 'Default'
+
+@description('Optional. Connection protocol used for this connection.')
+@allowed([
+  'IKEv1'
+  'IKEv2'
+])
+param connectionProtocol string = 'IKEv2'
+
+@description('Optional. The dead peer detection timeout of this connection in seconds.')
+@minValue(9)
+@maxValue(3600)
+param dpdTimeoutSeconds int = 45
+
+@description('Optional. Enable policy-based traffic selectors.')
+param usePolicyBasedTrafficSelectors bool = false
+
+@description('Optional. The traffic selector policies to be considered by this connection.')
+param trafficSelectorPolicies trafficSelectorPolicyType[] = []
+
+@description('Required. The custom IPsec/IKE policy for this connection.')
+param customIPSecPolicy ipsecPolicyType
+
+resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-05-01' existing = {
+  name: vpnGatewayName
+}
+
+resource localGateway 'Microsoft.Network/localNetworkGateways@2024-05-01' = {
+  name: localNetworkGatewayName
+  location: location
+  properties: {
+    gatewayIpAddress: peerPublicIp
+    localNetworkAddressSpace: {
+      addressPrefixes: peerAddressPrefixes
+    }
+  }
+}
+
+resource connection 'Microsoft.Network/connections@2024-05-01' = {
+  name: name
+  location: location
+  properties: {
+    connectionType: connectionType
+    connectionMode: connectionMode
+    connectionProtocol: connectionProtocol
+    dpdTimeoutSeconds: dpdTimeoutSeconds
+    virtualNetworkGateway1: any({ id: vpnGateway.id })
+    localNetworkGateway2: any({ id: localGateway.id })
+    sharedKey: vpnSharedKey
+    usePolicyBasedTrafficSelectors: usePolicyBasedTrafficSelectors
+    trafficSelectorPolicies: trafficSelectorPolicies
+    ipsecPolicies: [
+      customIPSecPolicy
+    ]
+  }
+}
+
+output resourceId string = connection.id
+output name string = connection.name`;
+  const types=`// ${typesPath}: must export these two types (copied from avm/res/network/connection 0.1.7)
+@export()
+@description('The custom IPSec policy configuration for the connection.')
+type ipsecPolicyType = {
+  saLifeTimeSeconds: int
+  saDataSizeKilobytes: int
+  ipsecEncryption: ${AVM.ipsecEncryption.map(x=>`'${x}'`).join(" | ")}
+  ipsecIntegrity: ${AVM.ipsecIntegrity.map(x=>`'${x}'`).join(" | ")}
+  ikeEncryption: ${AVM.ikeEncryption.map(x=>`'${x}'`).join(" | ")}
+  ikeIntegrity: ${AVM.ikeIntegrity.map(x=>`'${x}'`).join(" | ")}
+  dhGroup: ${AVM.dhGroup.map(x=>`'${x}'`).join(" | ")}
+  pfsGroup: ${AVM.pfsGroup.map(x=>`'${x}'`).join(" | ")}
+}
+
+@export()
+@description('Traffic selector policy configuration.')
+type trafficSelectorPolicyType = {
+  localAddressRanges: string[]
+  remoteAddressRanges: string[]
+}`;
+  return [{title:file,text:params},{title:"main.bicep (template the parameter file uses)",text:tpl},{title:`${typesPath} (required exports)`,text:types}];
+};
+
+GEN.paloalto=c=>{
+  const n=N.paloalto,g1=isGcm(S.p1enc),g2=isGcm(S.p2enc),nm_=c.name,v=S.ikev==="2"?"ikev2":"ikev1";
+  const t=c.me.tun||"tunnel.10",ifc=c.me.iface||"ethernet1/1";
+  const L=[];
+  L.push(`# PAN-OS set commands, side ${c.k}. Adjust zone and virtual/logical router to your setup.`);
+  L.push(`set network ike crypto-profile ike-crypto-profiles IKE-${nm_} encryption ${n.enc[S.p1enc]}`);
+  L.push(`set network ike crypto-profile ike-crypto-profiles IKE-${nm_} hash ${g1?"non-auth   # required with GCM; PRF follows the DH group":n.int[S.p1int]}`);
+  L.push(`set network ike crypto-profile ike-crypto-profiles IKE-${nm_} dh-group ${n.dh(S.dh)}`);
+  L.push(`set network ike crypto-profile ike-crypto-profiles IKE-${nm_} lifetime seconds ${S.p1life}`);
+  L.push(`set network ike crypto-profile ipsec-crypto-profiles IPSEC-${nm_} esp encryption ${n.enc[S.p2enc]}`);
+  L.push(`set network ike crypto-profile ipsec-crypto-profiles IPSEC-${nm_} esp authentication ${g2?"none":n.int[S.p2int]}`);
+  L.push(`set network ike crypto-profile ipsec-crypto-profiles IPSEC-${nm_} dh-group ${n.pfs(S.pfs)}`);
+  L.push(`set network ike crypto-profile ipsec-crypto-profiles IPSEC-${nm_} lifetime seconds ${S.p2life}`);
+  if(S.p2kb)L.push(`set network ike crypto-profile ipsec-crypto-profiles IPSEC-${nm_} lifesize kb ${S.p2kb}`);
+  L.push(`set network interface tunnel units ${t} comment "${c.peer.name}"`);
+  L.push(`set network ike gateway GW-${nm_} protocol version ${v}`);
+  L.push(`set network ike gateway GW-${nm_} protocol ${v} ike-crypto-profile IKE-${nm_}`);
+  L.push(`set network ike gateway GW-${nm_} protocol ${v} dpd enable yes`);
+  L.push(`set network ike gateway GW-${nm_} protocol ${v} dpd interval ${S.dpdInt}`);
+  if(S.ikev==="1"){L.push(`set network ike gateway GW-${nm_} protocol ikev1 dpd retry ${S.dpdRetry}`);L.push(`set network ike gateway GW-${nm_} protocol ikev1 exchange-mode main`)}
+  L.push(`set network ike gateway GW-${nm_} authentication pre-shared-key key "${PSK}"`);
+  L.push(`set network ike gateway GW-${nm_} local-address interface ${ifc}`);
+  L.push(`set network ike gateway GW-${nm_} peer-address ip ${c.peer.ip}`);
+  L.push(`set network tunnel ipsec TUN-${nm_} auto-key ike-gateway GW-${nm_}`);
+  L.push(`set network tunnel ipsec TUN-${nm_} auto-key ipsec-crypto-profile IPSEC-${nm_}`);
+  L.push(`set network tunnel ipsec TUN-${nm_} tunnel-interface ${t}`);
+  if(!c.anyAny){
+    L.push(`# One proxy-ID per subnet pair (required toward a policy-based peer)`);
+    c.pairs.forEach(([l,r],i)=>L.push(`set network tunnel ipsec TUN-${nm_} auto-key proxy-id PID-${i+1} local ${l.text} remote ${r.text} protocol any`));
+  }
+  L.push(`# Static routes (legacy virtual router; with Advanced Routing use: set network logical-router ...)`);
+  c.remote.forEach((r,i)=>L.push(`set network virtual-router default routing-table ip static-route R-${nm_}-${i+1} destination ${r.text} interface ${t}`));
+  return L.join("\n");
+};
+
+GEN.fortigate=c=>{
+  const n=N.fortigate,g1=isGcm(S.p1enc),g2=isGcm(S.p2enc),nm_=c.name.slice(0,15);
+  const p1=g1?`${n.enc[S.p1enc]}-prf${n.int[S.p1int]}`:`${n.enc[S.p1enc]}-${n.int[S.p1int]}`;
+  const p2=g2?n.enc[S.p2enc]:`${n.enc[S.p2enc]}-${n.int[S.p2int]}`;
+  const ifc=c.me.iface||"wan1";
+  const sel=c.anyAny?[[{net:0,mask:0},{net:0,mask:0}]]:c.pairs;
+  let o=`# FortiOS CLI, side ${c.k}
+config vpn ipsec phase1-interface
+    edit "${nm_}"
+        set interface "${ifc}"
+        set ike-version ${S.ikev}
+${S.ikev==="1"?"        set mode main\n":""}        set peertype any
+        set net-device disable
+        set proposal ${p1}
+        set dhgrp ${S.dh}
+        set keylife ${S.p1life}
+        set dpd on-idle
+        set dpd-retryinterval ${S.dpdInt}
+        set dpd-retrycount ${S.dpdRetry}
+        set remote-gw ${c.peer.ip}
+        set psksecret ${PSK}
+    next
+end
+config vpn ipsec phase2-interface
+`;
+  sel.forEach(([l,r],i)=>{o+=`    edit "${nm_}-p2-${i+1}"
+        set phase1name "${nm_}"
+        set proposal ${p2}
+${S.pfs?`        set dhgrp ${S.pfs}\n`:"        set pfs disable\n"}        set keylifeseconds ${S.p2life}
+${S.p2kb?`        set keylife-type both\n        set keylifekbs ${S.p2kb}\n`:""}        set src-subnet ${netStr(l)} ${i2s(l.mask)}
+        set dst-subnet ${netStr(r)} ${i2s(r.mask)}
+    next
+`});
+  o+=`end
+config router static
+${c.remote.map(r=>`    edit 0
+        set dst ${netStr(r)} ${maskStr(r)}
+        set device "${nm_}"
+    next`).join("\n")}
+end
+# Add firewall policies lan <-> "${nm_}" in both directions.`;
+  return o;
+};
+
+GEN.meraki=c=>`Meraki Dashboard, side ${c.k}
+Security & SD-WAN > Site-to-site VPN > Non-Meraki VPN peers > Add a peer
+
+  Name .................. ${c.peer.name}
+  IKE version ........... IKEv${S.ikev}
+  Public IP ............. ${c.peer.ip}
+  Routing ............... ${c.eff.mode==="route"?"Static (route-based, requires MX 19.2.7+)":"Policy-based"}
+  Private subnets ....... ${c.remote.map(r=>r.text).join(", ")}
+  Preshared secret ...... ${PSK}
+  IPsec policies ........ Custom
+
+  Phase 1
+    Encryption .......... ${nm("meraki","enc",S.p1enc)}
+    Authentication ...... ${nm("meraki","int",S.p1int)}
+    Diffie-Hellman group  ${nm("meraki","dh",S.dh)}
+    Lifetime (seconds) .. ${S.p1life}
+
+  Phase 2
+    Encryption .......... ${nm("meraki","enc",S.p2enc)}
+    Authentication ...... ${isGcm(S.p2enc)?"(GCM not supported)":nm("meraki","int",S.p2int)}
+    PFS group ........... ${nm("meraki","pfs",S.pfs)}
+    Lifetime (seconds) .. ${S.p2life}
+
+  DPD ................... fixed by the platform (not configurable)
+
+Local networks to send through the tunnel (set "In VPN" = Yes under Local networks):
+  ${c.local.map(l=>l.text).join("\n  ")}
+
+Select a single algorithm per field in the custom policy so the proposal is unambiguous.`;
+
+GEN.iosxe=c=>{
+  const n=N.iosxe,g1=isGcm(S.p1enc),g2=isGcm(S.p2enc),nm_=c.name;
+  const ts=`${n.esp[S.p2enc]}${g2?"":" "+n.espi[S.p2int]}`;
+  const tun=(c.me.tun||"Tunnel10"),ifc=c.me.iface||"GigabitEthernet1";
+  let o=`! Cisco IOS-XE, side ${c.k}\n`;
+  if(S.ikev==="2"){o+=`crypto ikev2 proposal PROP-${nm_}
+ encryption ${n.enc[S.p1enc]}
+ ${g1?"prf":"integrity"} ${n.int[S.p1int]}
+ group ${S.dh}
+!
+crypto ikev2 policy POL-${nm_}
+ proposal PROP-${nm_}
+!
+crypto ikev2 keyring KR-${nm_}
+ peer ${nm_}
+  address ${c.peer.ip}
+  pre-shared-key ${PSK}
+!
+crypto ikev2 profile PROF-${nm_}
+ match identity remote address ${c.peer.ip} 255.255.255.255
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local KR-${nm_}
+ lifetime ${S.p1life}
+ dpd ${S.dpdInt} ${S.dpdInt} on-demand
+ ! dpd <interval> <retry-interval>: IOS-XE retries a fixed number of times
+!
+`}else{o+=`crypto isakmp policy 10
+ encryption ${n.enc1[S.p1enc]||"(not supported in IKEv1)"}
+ hash ${S.p1int==="sha1"?"sha":n.int[S.p1int]}
+ authentication pre-share
+ group ${S.dh}
+ lifetime ${S.p1life}
+crypto isakmp key ${PSK} address ${c.peer.ip}
+crypto isakmp keepalive ${S.dpdInt} ${S.dpdInt} on-demand
+!
+`}
+  o+=`crypto ipsec transform-set TS-${nm_} ${ts}
+ mode tunnel
+!
+`;
+  const pfsL=S.pfs?` set pfs ${n.pfs(S.pfs)}\n`:"";
+  if(c.eff.mode==="route"){
+    o+=`crypto ipsec profile IPS-${nm_}
+ set transform-set TS-${nm_}
+${S.ikev==="2"?` set ikev2-profile PROF-${nm_}\n`:""}${pfsL} set security-association lifetime seconds ${S.p2life}
+!
+interface ${tun}
+ description VPN to ${c.peer.name}
+ ip unnumbered ${ifc}
+ tunnel source ${ifc}
+ tunnel mode ipsec ipv4
+ tunnel destination ${c.peer.ip}
+ tunnel protection ipsec profile IPS-${nm_}
+!
+${c.remote.map(r=>`ip route ${netStr(r)} ${maskStr(r)} ${tun}`).join("\n")}`;
+  }else{
+    o+=`ip access-list extended VPN-${nm_}
+${c.pairs.map(([l,r])=>` permit ip ${netStr(l)} ${wild(l)} ${netStr(r)} ${wild(r)}`).join("\n")}
+!
+crypto map CMAP 10 ipsec-isakmp
+ set peer ${c.peer.ip}
+ set transform-set TS-${nm_}
+${S.ikev==="2"?` set ikev2-profile PROF-${nm_}\n`:""}${pfsL} set security-association lifetime seconds ${S.p2life}
+ match address VPN-${nm_}
+!
+interface ${ifc}
+ crypto map CMAP
+! Exempt the VPN traffic from NAT (deny it in the NAT ACL).`;
+    if(c.eff.switched)o=`! A route-based VTI cannot narrow selectors, so this side is generated as a crypto map.\n`+o;
+  }
+  return o;
+};
+
+GEN.asa=c=>{
+  const n=N.asa,g1=isGcm(S.p1enc),g2=isGcm(S.p2enc),nm_=c.name,ifc=c.me.iface||"outside",map=ifc.toUpperCase()+"_MAP";
+  let o=`! Cisco ASA, side ${c.k}
+object-group network LOCAL-${nm_}
+${c.local.map(l=>` network-object ${netStr(l)} ${maskStr(l)}`).join("\n")}
+object-group network REMOTE-${nm_}
+${c.remote.map(r=>` network-object ${netStr(r)} ${maskStr(r)}`).join("\n")}
+!
+`;
+  if(S.ikev==="2"){o+=`crypto ikev2 policy 10
+ encryption ${n.enc[S.p1enc]}
+ integrity ${g1?"null":n.int[S.p1int]}
+ group ${S.dh}
+ prf ${n.int[S.p1int]}
+ lifetime seconds ${S.p1life}
+crypto ikev2 enable ${ifc}
+!
+crypto ipsec ikev2 ipsec-proposal PROP-${nm_}
+ protocol esp encryption ${n.enc[S.p2enc]}
+ protocol esp integrity ${g2?"null":n.espi[S.p2int]}
+!
+`}else{o+=`crypto ikev1 policy 10
+ authentication pre-share
+ encryption ${n.enc[S.p1enc]}
+ hash ${n.int[S.p1int]}
+ group ${S.dh}
+ lifetime ${S.p1life}
+crypto ikev1 enable ${ifc}
+!
+crypto ipsec ikev1 transform-set TS-${nm_} ${n.ts1[S.p2enc]||"(GCM not supported with IKEv1)"} ${n.ts1i[S.p2int]||""}
+!
+`}
+  o+=`tunnel-group ${c.peer.ip} type ipsec-l2l
+tunnel-group ${c.peer.ip} ipsec-attributes
+${S.ikev==="2"?` ikev2 remote-authentication pre-shared-key ${PSK}\n ikev2 local-authentication pre-shared-key ${PSK}`:` ikev1 pre-shared-key ${PSK}`}
+ isakmp keepalive threshold ${S.dpdInt} retry ${S.dpdInt}
+ ! threshold = idle seconds before DPD, retry = seconds between attempts
+!
+`;
+  const setP=S.ikev==="2"?`set ikev2 ipsec-proposal PROP-${nm_}`:`set ikev1 transform-set TS-${nm_}`;
+  if(c.eff.mode==="route"){
+    const t=c.me.tun||"Tunnel10",nif="vti-"+nm_.toLowerCase();
+    o+=`crypto ipsec profile IPS-${nm_}
+ ${setP}
+${S.pfs?` set pfs ${n.pfs(S.pfs)}\n`:""} set security-association lifetime seconds ${S.p2life}
+!
+interface ${t}
+ nameif ${nif}
+ ip address 169.254.10.1 255.255.255.252
+ tunnel source interface ${ifc}
+ tunnel destination ${c.peer.ip}
+ tunnel mode ipsec ipv4
+ tunnel protection ipsec profile IPS-${nm_}
+!
+${c.remote.map(r=>`route ${nif} ${netStr(r)} ${maskStr(r)} 169.254.10.2`).join("\n")}
+! Replace 169.254.10.x with the agreed tunnel addresses.`;
+  }else{
+    o+=`access-list VPN-${nm_} extended permit ip object-group LOCAL-${nm_} object-group REMOTE-${nm_}
+!
+crypto map ${map} 10 match address VPN-${nm_}
+crypto map ${map} 10 set peer ${c.peer.ip}
+crypto map ${map} 10 ${setP}
+${S.pfs?`crypto map ${map} 10 set pfs ${n.pfs(S.pfs)}\n`:""}crypto map ${map} 10 set security-association lifetime seconds ${S.p2life}
+crypto map ${map} interface ${ifc}
+!
+nat (inside,${ifc}) source static LOCAL-${nm_} LOCAL-${nm_} destination static REMOTE-${nm_} REMOTE-${nm_} no-proxy-arp route-lookup`;
+    if(c.eff.switched)o=`! A VTI cannot narrow selectors, so this side is generated as a crypto map.\n`+o;
+  }
+  if(S.ikev==="1"&&["sha256","sha384","sha512"].includes(S.p1int))o+=`\n! Older ASA releases only accept sha/md5 in an IKEv1 policy.`;
+  return o;
+};
+
+GEN.strongswan=c=>{
+  const n=N.strongswan,g1=isGcm(S.p1enc),g2=isGcm(S.p2enc),nm_=c.name.toLowerCase();
+  const ike=`${n.enc[S.p1enc]}-${g1?"prf":""}${n.int[S.p1int]}-${SW_DH[S.dh]}`;
+  const esp=`${n.enc[S.p2enc]}${g2?"":"-"+n.int[S.p2int]}${S.pfs?"-"+SW_DH[S.pfs]:""}`;
+  const route=c.eff.mode==="route",ifid=c.me.tun||"10";
+  const kids=(c.anyAny?[["0.0.0.0/0","0.0.0.0/0"]]:c.pairs.map(([l,r])=>[l.text,r.text])).map(([l,r],i)=>`      ${nm_}-${i+1} {
+        local_ts = ${l}
+        remote_ts = ${r}
+        esp_proposals = ${esp}
+        rekey_time = ${S.p2life}s${S.p2kb?`\n        rekey_bytes = ${S.p2kb*1024}`:""}
+        start_action = trap|start
+        dpd_action = restart${route?`\n        if_id_in = ${ifid}\n        if_id_out = ${ifid}`:""}
+      }`).join("\n");
+  return `# /etc/swanctl/conf.d/${nm_}.conf, side ${c.k}
+connections {
+  ${nm_} {
+    version = ${S.ikev}
+    local_addrs = ${c.me.ip}
+    remote_addrs = ${c.peer.ip}
+    proposals = ${ike}
+    rekey_time = ${S.p1life}s
+    dpd_delay = ${S.dpdInt}s
+    local { auth = psk  id = ${c.me.ip} }
+    remote { auth = psk  id = ${c.peer.ip} }
+    children {
+${kids}
+    }
+  }
+}
+secrets {
+  ike-${nm_} {
+    id-1 = ${c.me.ip}
+    id-2 = ${c.peer.ip}
+    secret = "${PSK}"
+  }
+}
+# DPD retries: /etc/strongswan.d/charon.conf -> charon { retransmit_tries = ${S.dpdRetry} }${route?`
+# Route-based (XFRM interface):
+#   ip link add xfrm${ifid} type xfrm dev <wan> if_id ${ifid} && ip link set xfrm${ifid} up
+${c.remote.map(r=>`#   ip route add ${r.text} dev xfrm${ifid}`).join("\n")}`:""}
+# One child per subnet pair gives one SA per pair, which policy-based peers expect.`;
+};
+
+GEN.opnsense=c=>{
+  const n=N.opnsense,sw=N.strongswan,g1=isGcm(S.p1enc),g2=isGcm(S.p2enc);
+  const route=c.eff.mode==="route",reqid=(c.me.tun||"10").trim()||"10";
+  const ike=`${sw.enc[S.p1enc]}-${g1?"prf":""}${sw.int[S.p1int]}-${SW_DH[S.dh]}`;
+  const esp=`${sw.enc[S.p2enc]}${g2?"":"-"+sw.int[S.p2int]}${S.pfs?"-"+SW_DH[S.pfs]:""}`;
+  const kids=c.anyAny?[[{text:"0.0.0.0/0"},{text:"0.0.0.0/0"}]]:c.pairs;
+  const opn=`OPNsense, side ${c.k}: VPN > IPsec > Connections
+(the Connections model; field names from docs.opnsense.org)
+
+1. Pre-shared key ............ VPN > IPsec > Pre-Shared Keys > +
+     Local Identifier ........ ${c.me.ip}
+     Remote Identifier ....... ${c.peer.ip}
+     Pre-Shared Key .......... ${PSK}
+${route?`
+2. Virtual tunnel interface .. VPN > IPsec > Virtual Tunnel Interfaces > +
+     Reqid ................... ${reqid}
+     Local address ........... ${c.me.ip}
+     Remote address .......... ${c.peer.ip}
+     Tunnel local address .... 169.254.${reqid}.1   (agree with the peer)
+     Tunnel remote address ... 169.254.${reqid}.2
+`:""}
+${route?"3":"2"}. Connection ................ VPN > IPsec > Connections > +
+   General settings
+     Description ............. ${c.peer.name}
+     Version ................. IKEv2
+     Proposals ............... ${ike}   (remove the default first)
+     Local addresses ......... ${c.me.ip}
+     Remote addresses ........ ${c.peer.ip}
+     Unique .................. Replace
+     DPD delay (s) ........... ${S.dpdInt}
+     Rekey time (s) .......... ${S.p1life}   (advanced mode)
+   Local authentication > +
+     Authentication .......... Pre-Shared Key
+     Id ...................... ${c.me.ip}
+   Remote authentication > +
+     Authentication .......... Pre-Shared Key
+     Id ...................... ${c.peer.ip}
+   Children${kids.length>1?` (one per subnet pair, ${kids.length} in total)`:""}
+${kids.map(([l,r],i)=>`   Child ${i+1}
+     Description ............. ${l.text} <> ${r.text}
+     Mode .................... Tunnel
+     Policies ................ ${route?"unchecked (routing decides; never install policies on a VTI)":"checked"}
+${route?`     Reqid ................... ${reqid}\n`:""}     Local ................... ${l.text}
+     Remote .................. ${r.text}
+     ESP proposals ........... ${esp}
+     Start action ............ ${route?"Trap":"Start"}
+     Rekey time (s) .......... ${S.p2life}   (advanced mode)`).join("\n")}
+   Save, then Apply.
+${route?`
+4. Gateway ................... System > Gateways > Configuration > +
+     Name .................... IPSEC${reqid}_GW
+     Interface ............... IPSEC${reqid}
+     IP address .............. 169.254.${reqid}.2
+
+5. Routes .................... System > Routes > Configuration
+${c.remote.map(r=>`     ${r.text.padEnd(20)} via IPSEC${reqid}_GW`).join("\n")}
+`:""}
+${route?"6":"3"}. Firewall .................. Firewall > Rules > IPsec: allow the tunnel traffic.
+
+DPD retries are not a per-connection field; strongSwan's global retransmission settings apply.
+Check status under VPN > IPsec > Status Overview.${c.eff.switched?"\n\nRoute-based cannot narrow selectors here, so this side is generated as policy-based with one child per subnet pair.":""}`;
+  const pf=`pfSense, side ${c.k}: VPN > IPsec > Tunnels (Phase 1 / Phase 2)
+
+Phase 1
+  Key Exchange version ... IKEv2
+  Remote gateway ......... ${c.peer.ip}
+  Authentication ......... Mutual PSK
+  Pre-Shared Key ......... ${PSK}
+  Encryption ............. ${n.enc[S.p1enc]}
+  Hash ................... ${n.int[S.p1int]}${g1?" (PRF)":""}
+  DH key group ........... ${n.dh(S.dh)}
+  Lifetime ............... ${S.p1life}
+  Dead Peer Detection .... delay ${S.dpdInt} s, max failures ${S.dpdRetry}
+
+${kids.map(([l,r],i)=>`Phase 2 #${i+1}
+  Mode ................... ${route?"Routed (VTI)":"Tunnel IPv4"}
+  Local network .......... ${l.text}
+  Remote network ......... ${r.text}
+  Encryption ............. ${n.enc[S.p2enc]}
+  Hash ................... ${g2?"(none, GCM)":n.int[S.p2int]}
+  PFS key group .......... ${n.pfs(S.pfs)}
+  Lifetime ............... ${S.p2life}`).join("\n\n")}`;
+  return [{title:"OPNsense (Connections)",text:opn},{title:"pfSense (Tunnels)",text:pf}];
+};
+
+/* ---------- name mapping ---------- */
+function dpdName(v){
+  return {azure:`dpdTimeoutSeconds ${azureDpd()}`,paloalto:S.ikev==="2"?`interval ${S.dpdInt}`:`interval ${S.dpdInt}, retry ${S.dpdRetry}`,
+    fortigate:`retryinterval ${S.dpdInt}, retrycount ${S.dpdRetry}`,meraki:"fixed",iosxe:`dpd ${S.dpdInt} ${S.dpdInt} on-demand`,
+    asa:`keepalive threshold ${S.dpdInt} retry ${S.dpdInt}`,strongswan:`dpd_delay ${S.dpdInt}s, retransmit_tries ${S.dpdRetry}`,
+    opnsense:`DPD delay ${S.dpdInt} (pfSense: max failures ${S.dpdRetry})`}[v];
+}
+function cheatRows(){
+  const a=S.A.vendor,b=S.B.vendor,g2=isGcm(S.p2enc);
+  const fmt=(v,val)=>(v==="iosxe"&&S.ikev==="1")?nm(v,"enc1",val):nm(v,"enc",val);
+  const p2i=v=>g2?(v==="azure"?nm(v,"enc",S.p2enc):v==="paloalto"?"none":v==="asa"?"null":"(GCM, none)"):
+    (v==="iosxe"||v==="asa")?nm(v,"espi",S.p2int):nm(v,"int",S.p2int);
+  const p2e=v=>v==="iosxe"?nm(v,"esp",S.p2enc):nm(v,"enc",S.p2enc);
+  const p1i=v=>(isGcm(S.p1enc)&&v==="paloalto")?`non-auth (PRF ${S.dh<=19?"sha256":S.dh===20?"sha384":"?"})`:nm(v,"int",S.p1int);
+  return [
+    ["Phase 1 encryption",encLabel(S.p1enc),fmt(a,S.p1enc),fmt(b,S.p1enc)],
+    [isGcm(S.p1enc)?"Phase 1 PRF":"Phase 1 integrity",intLabel(S.p1int),p1i(a),p1i(b)],
+    ["DH group",dhLabel(S.dh),nm(a,"dh",S.dh),nm(b,"dh",S.dh)],
+    ["Phase 2 encryption",encLabel(S.p2enc),p2e(a),p2e(b)],
+    ["Phase 2 integrity",g2?"(GCM)":intLabel(S.p2int),p2i(a),p2i(b)],
+    ["PFS",dhLabel(S.pfs),nm(a,"pfs",S.pfs),nm(b,"pfs",S.pfs)],
+    ["DPD",`${S.dpdInt} s × ${S.dpdRetry}`,dpdName(a),dpdName(b)]
+  ];
+}
+
+/* ---------- render ---------- */
+let R=null,tab="A",blocks=[];
+const SEVL={err:"ERROR",warn:"WARNING",info:"INFO",ok:"OK"};
+function update(){
+  ["A","B"].forEach(k=>{const v=S[k].vendor;
+    $(k+"mode").disabled=V[v].modes.length===1;
+    if(!V[v].modes.includes(S[k].mode))S[k].mode=V[v].modes[0];
+    $(k+"mode").value=S[k].mode;
+    const az=v==="azure";["rg","gw","loc","cmode","types"].forEach(f=>$(k+f+"L").hidden=!az);
+    $(k+"ifaceL").hidden=az||v==="meraki"||v==="strongswan";
+    $(k+"tunL").hidden=az||v==="meraki"||v==="fortigate";
+    $(k+"tunT").textContent=v==="strongswan"?"XFRM if_id":v==="opnsense"?"VTI reqid":"Tunnel interface";
+    $(k+"vhint").textContent=az?"Azure is always route-based. Against a policy-based peer, usePolicyBasedTrafficSelectors is switched on automatically.":v==="meraki"?"Route-based toward third-party peers requires MX 19.2.7 or later.":"";
+    $("h"+k).textContent=S[k].name||("Side "+k);
+  });
+  $("ikeBadge").textContent="IKEv"+S.ikev;
+  renderCryptoSelects();
+  R=analyze();
+  const order={err:0,warn:1,ok:2,info:3};
+  const list=R.issues.slice().sort((a,b)=>order[a[0]]-order[b[0]]);
+  $("checks").innerHTML=list.map(([s,t])=>`<li><span class="sev ${s}">${SEVL[s]}</span><span>${esc(t)}</span></li>`).join("");
+  const ne=list.filter(x=>x[0]==="err").length,nw=list.filter(x=>x[0]==="warn").length;
+  $("checkCount").textContent=`${ne} errors · ${nw} warnings`;
+  const st=$("status");st.className="pill "+(ne?"err":nw?"warn":"ok");st.textContent=ne?`${ne} ${ne===1?"error":"errors"}, tunnel will not come up`:nw?`Matches · ${nw} ${nw===1?"warning":"warnings"}`:"Matches";
+  const eA=R.eff.A,eB=R.eff.B;
+  $("tsMode").textContent=`A: ${eA.mode}${eA.narrowed?" (narrow TS)":""} · B: ${eB.mode}${eB.narrowed?" (narrow TS)":""}`;
+  if(!R.selectors)$("tsTable").innerHTML=`<thead><tr><th>Side A local</th><th></th><th>Side B local</th></tr></thead><tbody><tr><td class="mono">0.0.0.0/0</td><td>⇄</td><td class="mono">0.0.0.0/0</td></tr><tr><td colspan="3" class="hint">Routes decide the traffic: A routes ${esc(R.B.nets.map(x=>x.text).join(", "))} and B routes ${esc(R.A.nets.map(x=>x.text).join(", "))} into the tunnel.</td></tr></tbody>`;
+  else $("tsTable").innerHTML=`<thead><tr><th>#</th><th>Side A local</th><th></th><th>Side B local</th></tr></thead><tbody>${R.selectors.map(([a,b],i)=>`<tr><td class="mono">${i+1}</td><td class="mono">${esc(a.text)}</td><td>⇄</td><td class="mono">${esc(b.text)}</td></tr>`).join("")||`<tr><td colspan="4" class="hint">No valid networks.</td></tr>`}</tbody>`;
+  renderTabs();renderOut();save();
+}
+function renderTabs(){
+  const t=[["A",`Side A · ${V[S.A.vendor].short}`],["B",`Side B · ${V[S.B.vendor].short}`],["names","Name mapping"]];
+  $("tabs").innerHTML=t.map(([id,l])=>`<button class="tab" role="tab" type="button" data-t="${id}" aria-selected="${tab===id}">${esc(l)}</button>`).join("");
+  $("tabs").querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.t;renderTabs();renderOut()}));
+}
+function blockHtml(i,title,hint,inner){return `<div class="block"><div class="block-bar"><div><h3>${esc(title)}</h3>${hint?`<p class="hint">${esc(hint)}</p>`:""}</div><span style="display:flex;gap:8px;align-items:center"><span class="toast" id="toast${i}" aria-live="polite"></span><button class="btn ghost" type="button" data-copy="${i}">Copy</button></span></div>${inner}</div>`}
+function renderOut(){
+  if(tab==="names"){
+    const rows=cheatRows();
+    blocks=[rows.map(r=>r.join("\t")).join("\n")];
+    $("outBody").innerHTML=blockHtml(0,"Same choices, spelled the way each platform expects","",`<div class="tbl-wrap" style="margin-top:0"><table><thead><tr><th>Parameter</th><th>Neutral</th><th>${esc(V[S.A.vendor].short)} (A)</th><th>${esc(V[S.B.vendor].short)} (B)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td class="mono">${esc(r[2])}</td><td class="mono">${esc(r[3])}</td></tr>`).join("")}</tbody></table></div>`);
+  }else{
+    const valid=R.A.nets.length&&R.B.nets.length;
+    const v=S[tab].vendor;
+    let res=valid?GEN[v](ctxFor(tab,R)):"Enter valid networks on both sides to generate configuration.";
+    if(typeof res==="string")res=[{title:V[v].label,text:res}];
+    const hint=`${R.eff[tab].mode==="route"?"Route-based":"Policy-based"}${R.eff[tab].narrowed?" with narrow selectors":""}`;
+    blocks=res.map(b=>b.text);
+    $("outBody").innerHTML=res.map((b,i)=>blockHtml(i,b.title,i===0?hint:"",`<pre id="pre${i}">${esc(b.text)}</pre>`)).join("");
+  }
+  $("outBody").querySelectorAll("[data-copy]").forEach(btn=>btn.addEventListener("click",()=>{
+    const i=+btn.dataset.copy,toast=$("toast"+i);
+    const done=()=>{toast.textContent="Copied";setTimeout(()=>toast.textContent="",1800)};
+    const fallback=()=>{const el=btn.closest(".block").querySelector("pre,table");const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);toast.textContent="Selected, press Ctrl/Cmd+C"};
+    try{navigator.clipboard.writeText(blocks[i]).then(done,fallback)}catch(e){fallback()}
+  }));
+}
+
+/* ---------- PDF ---------- */
+let downloads=null;
+(async()=>{try{downloads=window.claude&&window.claude.use?await window.claude.use("downloads"):null}catch(e){downloads=null}})();
+function buildPdf(){
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:"pt",format:"a4"});
+  const W=doc.internal.pageSize.getWidth(),M=40,accent=[11,106,134];
+  doc.setFillColor(...accent);doc.rect(0,0,W,64,"F");
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(17);
+  doc.text("IPsec Site-to-Site Parameter Sheet",M,30);
+  doc.setFont("helvetica","normal");doc.setFontSize(10);
+  const today=new Date().toISOString().slice(0,10);
+  doc.text(`${S.tunnelName||"Tunnel"}   |   ${today}${S.author?"   |   Prepared by "+S.author:""}`,M,48);
+  const eA=R.eff.A,eB=R.eff.B,modeTxt=e=>(e.mode==="route"?"Route-based":"Policy-based")+(e.narrowed?" (narrowed selectors)":"")+(e.switched?" (policy to match peer)":"");
+  const base={theme:"grid",styles:{font:"helvetica",fontSize:9,cellPadding:4,textColor:[22,32,46],lineColor:[213,219,228]},headStyles:{fillColor:accent,textColor:255,fontStyle:"bold"},margin:{left:M,right:M},columnStyles:{0:{fontStyle:"bold",cellWidth:120}}};
+  const next=()=>doc.lastAutoTable.finalY+16;
+  doc.autoTable(Object.assign({},base,{startY:84,head:[["Endpoint","Side A","Side B"]],
+    body:[["Site / organisation",S.A.name,S.B.name],["Platform",V[S.A.vendor].label,V[S.B.vendor].label],["Public IP (peer address)",S.A.ip,S.B.ip],
+      ["Local networks",R.A.nets.map(x=>x.text).join("\n"),R.B.nets.map(x=>x.text).join("\n")],["VPN type",modeTxt(eA),modeTxt(eB)]]}));
+  const ch=cheatRows(),vA=V[S.A.vendor].short,vB=V[S.B.vendor].short;
+  doc.autoTable(Object.assign({},base,{startY:next(),head:[["Phase 1 (IKE)","Agreed value",vA+" naming",vB+" naming"]],
+    body:[["IKE version","IKEv"+S.ikev+(S.ikev==="1"?" (main mode)":""),"",""],["Authentication","Pre-shared key (exchanged out-of-band, never in this document)","",""],
+      ["Encryption",ch[0][1],ch[0][2],ch[0][3]],[isGcm(S.p1enc)?"PRF (GCM)":"Integrity",ch[1][1],ch[1][2],ch[1][3]],["DH group",ch[2][1],ch[2][2],ch[2][3]],
+      ["SA lifetime",S.p1life+" s","",""],["Dead peer detection",`Interval ${S.dpdInt} s, ${S.dpdRetry} retries`,ch[6][2],ch[6][3]]]}));
+  doc.autoTable(Object.assign({},base,{startY:next(),head:[["Phase 2 (IPsec)","Agreed value",vA+" naming",vB+" naming"]],
+    body:[["Protocol / mode","ESP, tunnel mode","",""],["Encryption",ch[3][1],ch[3][2],ch[3][3]],["Integrity",isGcm(S.p2enc)?"Provided by GCM":ch[4][1],ch[4][2],ch[4][3]],
+      ["PFS group",S.pfs?"Group "+S.pfs:"None",ch[5][2],ch[5][3]],["SA lifetime",S.p2life+" s"+(S.p2kb?" / "+S.p2kb+" KB":""),"",""]]}));
+  const tsBody=R.selectors?R.selectors.map(([a,b],i)=>[String(i+1),a.text,b.text]):[["-","0.0.0.0/0 (route-based)","0.0.0.0/0 (route-based)"]];
+  doc.autoTable(Object.assign({},base,{startY:next(),head:[["#","Side A local","Side B local"]],body:tsBody,columnStyles:{0:{cellWidth:30}}}));
+  const notes=[];
+  if(eA.narrowed||eB.narrowed)notes.push(`Side ${eA.narrowed?"A":"B"} is route-based and narrows its traffic selectors to the subnet pairs above to match the policy-based peer.`);
+  if(eA.switched||eB.switched)notes.push(`Side ${eA.switched?"A":"B"} is configured policy-based so its selectors match the peer.`);
+  const azSide=S.A.vendor==="azure"?"A":S.B.vendor==="azure"?"B":null;
+  if(azSide){notes.push(`Azure VPN Gateway uses a fixed IKE SA lifetime of 28,800 s and a DPD timeout of ${azureDpd()} s (no separate retry count).`);
+    if(R.eff[azSide].narrowed)notes.push("The Azure connection uses usePolicyBasedTrafficSelectors = true; the peer must propose every subnet pair listed.");}
+  if(!R.selectors)notes.push("Both sides are route-based (any/any selectors); each side routes the remote networks into its tunnel interface.");
+  notes.push("The pre-shared key is not part of this document. Agree it through a separate secure channel and enter it directly on each device.");
+  notes.push("Either side may initiate. UDP 500 and UDP 4500 (NAT-T) must be allowed between the public IPs.");
+  doc.autoTable(Object.assign({},base,{startY:next(),head:[["Notes"]],body:notes.map(n=>[n]),headStyles:{fillColor:[88,99,116],textColor:255},columnStyles:{}}));
+  const H=doc.internal.pageSize.getHeight(),pages=doc.getNumberOfPages();
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(88,99,116);
+    doc.text("Generated with IPsec Tunnelmatch. Verify against device documentation and lab-test before production.",M,H-22);doc.text(`${i}/${pages}`,W-M,H-22,{align:"right"})}
+  return doc.output("arraybuffer");
+}
+const PDF_LABEL="Save parameter sheet (PDF)";
+$("pdfBtn").addEventListener("click",async()=>{
+  const btn=$("pdfBtn"),ne=R.issues.filter(x=>x[0]==="err").length;
+  const msg=t=>{$("status").textContent=t;setTimeout(update,2500)};
+  if(!window.jspdf){msg("The PDF library did not load");return}
+  if(ne&&!btn.dataset.confirm){btn.dataset.confirm="1";btn.textContent=`${ne} ${ne===1?"error":"errors"} left, click again to save anyway`;setTimeout(()=>{delete btn.dataset.confirm;btn.textContent=PDF_LABEL},4000);return}
+  delete btn.dataset.confirm;btn.textContent=PDF_LABEL;
+  if(!downloads){try{downloads=await window.claude.use("downloads")}catch(e){downloads=null}}
+  if(!downloads){
+    // Outside Claude (plain browser, GitHub Pages): ordinary browser download
+    try{const url=URL.createObjectURL(new Blob([buildPdf()],{type:"application/pdf"}));
+      const a=document.createElement("a");a.href=url;a.download=`IPsec-${slug(S.tunnelName)}.pdf`;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);msg("PDF saved");}
+    catch(e){msg("Could not save the PDF")}
+    return}
+  try{
+    const buf=buildPdf();
+    await downloads.save({filename:`IPsec-${slug(S.tunnelName)}.pdf`,data:new Blob([buf],{type:"application/pdf"})});
+    msg("PDF saved");
+  }catch(e){if(e&&e.code==="declined")return;msg("Could not save the PDF"+(e&&e.code?" ("+e.code+")":""))}
+});
+
+/* ---------- sources ---------- */
+const SOURCES=[
+  {v:"azure",status:"Verified 2026-10-19",used:"Allowed IKE/IPsec algorithms, DH/PFS names, GCM pairing rule, fixed 28,800 s IKE SA, DPD 9–3600 s, SKU requirement, policy-based traffic selectors. Bicep parameter names and allowed values follow the AVM connection module 0.1.7.",links:[
+    ["Microsoft Learn: Configure custom IPsec/IKE connection policies","https://learn.microsoft.com/en-us/azure/vpn-gateway/ipsec-ike-policy-howto"],
+    ["Microsoft Learn: Microsoft.Network/connections (Bicep)","https://learn.microsoft.com/en-us/azure/templates/microsoft.network/connections?pivots=deployment-language-bicep"],
+    ["Azure Verified Modules: avm/res/network/connection","https://github.com/Azure/bicep-registry-modules/tree/main/avm/res/network/connection"]]},
+  {v:"paloalto",status:"Verified 2026-10-19",used:"IKE and IPsec crypto profile options, GCM requiring non-auth with the PRF taken from the DH group, aes-128-gcm with group 19, groups 15/16/21 needing PAN-OS 10.2+ and IKEv2, IKEv2 liveness check (5 s default, up to 10 retransmits).",links:[
+    ["Define IKE Crypto Profiles (PAN-OS 10.1 and later)","https://docs.paloaltonetworks.com/content/techdocs/en_US/network-security/ipsec-vpn/administration/set-up-site-to-site-vpn/define-cryptographic-profiles/define-ike-crypto-profiles-pan-os-10-1.html"],
+    ["Define IPSec Crypto Profiles (PAN-OS 10.1 and later)","https://docs.paloaltonetworks.com/network-security/ipsec-vpn/administration/set-up-site-to-site-vpn/define-cryptographic-profiles/define-ipsec-crypto-profiles-pan-os-10-1"],
+    ["IPSec Crypto profile fields (ESP authentication none)","https://docs.paloaltonetworks.com/pan-os/9-1/pan-os-web-interface-help/network/network-network-profiles/network-network-profiles-ipsec-crypto"],
+    ["IKEv2 liveness check","https://docs.paloaltonetworks.com/pan-os/10-0/pan-os-admin/vpns/site-to-site-vpn-concepts/ikev2/liveness-check"]]},
+  {v:"meraki",status:"Verified 2026-10-19",used:"Custom IPsec policy options (no GCM, no SHA-384, DH 1/2/5/14/15/21), firmware for IKEv2 and DH 15/21, single IKEv2 traffic selector with all subnets, MX 27.1 cipher removals, route-based from MX 19.2.7.",links:[
+    ["Meraki: IPsec VPN Configuration Settings","https://documentation.meraki.com/SASE_and_SD-WAN/MX/Design_and_Configure/Configuration_Guides/Site-to-site_VPN/IPsec_VPN_Configuration_Settings"],
+    ["Meraki: Insecure Cipher Deprecation","https://documentation.meraki.com/SASE_and_SD-WAN/MX/Product_Information/Compatibility_and_Firmware/Insecure_Cipher_Deprecation"],
+    ["Meraki: Custom IPsec policies with Site-to-site VPN","https://documentation.meraki.com/MX/Site-to-site_VPN/Custom_IPsec_policies_with_Site-to-site_VPN"],
+    ["Cloudflare: Cisco Meraki MX route-based (MX 19.2.7 requirement)","https://developers.cloudflare.com/cloudflare-wan/configuration/third-party/cisco-meraki-static/"]]},
+  {v:"fortigate",status:"Syntax reference",used:"phase1-interface and phase2-interface commands, proposal format, dhgrp, dpd-retrycount and dpd-retryinterval.",links:[
+    ["FortiOS 7.4.2 CLI reference: vpn ipsec phase1-interface","https://docs.fortinet.com/document/fortigate/7.4.2/cli-reference/333620"]]},
+  {v:"iosxe",status:"Syntax reference",used:"IKEv2 proposal, policy, keyring and profile; transform sets; IPsec profile with tunnel protection; crypto maps.",links:[
+    ["Cisco: Configuring IKEv2 and FlexVPN Site-to-Site","https://www.cisco.com/en/US/docs/ios-xml/ios/sec_conn_ike2vpn/configuration/15-2mt/sec-cfg-ikev2-flex.html"]]},
+  {v:"asa",status:"Syntax reference",used:"IKEv2 policy and IPsec proposal, tunnel-group attributes, crypto maps, VTI, isakmp keepalive.",links:[
+    ["Cisco: ASA IKEv2 site-to-site tunnel configuration example","https://www.cisco.com/c/en/us/support/docs/security/asa-5500-x-series-next-generation-firewalls/113486-ikev2-s2s-tunnel-00.html"],
+    ["Cisco: ASA command reference (isakmp keepalive)","https://www3-realm.cisco.com/en/US/docs/security/asa/command-reference/i5.html"]]},
+  {v:"strongswan",status:"Syntax reference",used:"swanctl.conf keys: proposals, esp_proposals, local_ts/remote_ts, rekey_time/rekey_bytes, dpd_delay, dpd_action, start_action, if_id_in/if_id_out.",links:[
+    ["strongSwan: swanctl.conf (latest)","https://docs.strongswan.org/docs/latest/swanctl/swanctlConf.html"]]},
+  {v:"opnsense",status:"Syntax reference",used:"OPNsense Connections model: pre-shared keys, connection general settings, local/remote authentication, children, virtual tunnel interfaces, gateways and routes. Proposals use strongSwan syntax. pfSense output keeps the Tunnels (phase 1/phase 2) layout.",links:[
+    ["OPNsense: IPsec route-based (VTI) PSK setup (Connections)","https://docs.opnsense.org/manual/how-tos/ipsec-s2s-conn-route.html"],
+    ["OPNsense: Virtual Private Networking overview","https://docs.opnsense.org/manual/vpnet.html"]]}
+];
+$("srcGrid").innerHTML=SOURCES.map(s=>`<article class="src"><div class="src-head"><strong>${esc(V[s.v].label)}</strong><span class="pill ${s.status.startsWith("Verified")?"ok":"warn"}">${esc(s.status)}</span></div><p class="used">${esc(s.used)}</p><ul>${s.links.map(([t,u])=>`<li><a href="${u}" target="_blank" rel="noopener">${esc(t)}</a></li>`).join("")}</ul></article>`).join("");
+
+bind();update();
+})();
+</script>
+</body>
+</html>

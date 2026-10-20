@@ -528,6 +528,7 @@ class FreeBsdFirewall(Shell):
 
     product = "firewall"
     apply_script = None
+    apply_steps = ["php /tmp/tmlab_apply.php /tmp/tmlab.json"]
     reload_cmds = []
     shell_prompt = r"^\S*@\S*:.*[#%$] $|^# $"
 
@@ -558,13 +559,15 @@ class FreeBsdFirewall(Shell):
         with open(os.path.join(HERE, self.apply_script), encoding="utf-8") as f:
             self.write_file("/tmp/tmlab_apply.php", f.read(), decode)
         self.write_file("/tmp/tmlab.json", json.dumps(self.node["data"]), decode)
-        out = self.run("php /tmp/tmlab_apply.php /tmp/tmlab.json; echo TMLAB-EXIT=$?", 300)
-        self.run("rm -f /tmp/tmlab.json /tmp/tmlab.json.b64")  # holds the lab's pre-shared keys
-        for bad in re.findall(r"(?m)^TMLAB-INVALID.*$", out):
-            self.errors.append(bad)
-        if "TMLAB-OK" not in out:
-            self.errors.append(f"{self.product} config update failed: " + out.strip()[-300:])
-            return
+        for step in self.apply_steps:
+            out = self.run(step + "; echo TMLAB-EXIT=$?", 300)
+            for bad in re.findall(r"(?m)^TMLAB-INVALID.*$", out):
+                self.errors.append(bad)
+            if "TMLAB-EXIT=0" not in out:
+                self.errors.append(f"{self.product} config update failed at `{step}`: " + out.strip()[-300:])
+                self.run("rm -f /tmp/tmlab.json /tmp/tmlab.json.b64")  # holds the lab's pre-shared keys
+                return
+        self.run("rm -f /tmp/tmlab.json /tmp/tmlab.json.b64")
         for cmd in self.reload_cmds:
             self.run(cmd, 600)
         for cmd in self.node["shell"]:
@@ -582,6 +585,13 @@ class FreeBsdFirewall(Shell):
 class OpnSense(FreeBsdFirewall):
     product = "OPNsense"
     apply_script = "opnsense_apply.php"
+    # enc0 only becomes a valid rule interface after the connections are saved and
+    # write_config() has registered the plugin interfaces
+    apply_steps = [
+        "php /tmp/tmlab_apply.php /tmp/tmlab.json ipsec",
+        """php -r 'require_once("config.inc"); write_config("tmlab: register the IPsec interface");'""",
+        "php /tmp/tmlab_apply.php /tmp/tmlab.json filter",
+    ]
     reload_cmds = ["/usr/local/etc/rc.reload_all", "/usr/local/sbin/pluginctl -c ipsec"]
 
     def __init__(self, node, plan, con):

@@ -3,7 +3,13 @@
 /*
  * IPsec Tunnelmatch GNS3 lab: applies the plan to an OPNsense node.
  *
- *   php opnsense_apply.php /tmp/tmlab.json
+ *   php opnsense_apply.php /tmp/tmlab.json ipsec    interfaces, connections, keys
+ *   php -r 'require_once("config.inc"); write_config("...");'   registers enc0
+ *   php opnsense_apply.php /tmp/tmlab.json filter   pass rule on the IPsec interface
+ *
+ * Two passes, because OPNsense only offers the IPsec interface (enc0) as a rule
+ * interface once an enabled connection is saved and the legacy config writer has
+ * registered the plugin interfaces (plugins_interfaces() in write_config()).
  *
  * Runs on the firewall itself (console shell, option 8). Uses the same MVC models
  * the GUI and API use (OPNsense\IPsec\Swanctl and OPNsense\IPsec\IPsec), so the
@@ -21,6 +27,49 @@ $in = json_decode(file_get_contents($argv[1]), true);
 if (!is_array($in)) {
     echo "TMLAB-INVALID input: cannot read {$argv[1]}\n";
     exit(1);
+}
+$mode = $argv[2] ?? 'ipsec';
+
+function tmlab_validate(array $models)
+{
+    $bad = 0;
+    foreach ($models as $name => $mdl) {
+        foreach ($mdl->performValidation() as $msg) {
+            echo "TMLAB-INVALID {$name} " . $msg->getField() . ": " . $msg->getMessage() . "\n";
+            $bad++;
+        }
+    }
+    if ($bad) {
+        Config::getInstance()->unlock();
+        exit(1);
+    }
+}
+
+if ($mode === 'filter') {
+    /* Let the tunnel traffic in on the IPsec interface (enc0). */
+    if (!isset(Config::getInstance()->object()->interfaces->enc0)) {
+        echo "TMLAB-INVALID filter: the IPsec interface enc0 is not registered yet (no enabled connection saved?)\n";
+        exit(1);
+    }
+    Config::getInstance()->lock();
+    $filter = new \OPNsense\Firewall\Filter();
+    $filter->rules->rule->Add()->setNodes([
+        'enabled' => '1',
+        'action' => 'pass',
+        'quick' => '1',
+        'interface' => 'enc0',
+        'direction' => 'in',
+        'ipprotocol' => 'inet',
+        'protocol' => 'any',
+        'source_net' => 'any',
+        'destination_net' => 'any',
+        'description' => 'tmlab: allow IPsec traffic',
+    ]);
+    tmlab_validate(['filter' => $filter]);
+    $filter->serializeToConfig();
+    Config::getInstance()->save();
+    echo "TMLAB-OK filter rule on enc0\n";
+    exit(0);
 }
 
 /* 1. Interfaces and IPsec on/off live in the legacy part of config.xml. */
@@ -85,34 +134,8 @@ foreach ($in['connections'] as $c) {
     ]);
 }
 
-/* 3. Let the tunnel traffic in on the IPsec interface (enc0). */
-$filter = new \OPNsense\Firewall\Filter();
-$filter->rules->rule->Add()->setNodes([
-    'enabled' => '1',
-    'action' => 'pass',
-    'quick' => '1',
-    'interface' => 'enc0',
-    'direction' => 'in',
-    'ipprotocol' => 'inet',
-    'protocol' => 'any',
-    'source_net' => 'any',
-    'destination_net' => 'any',
-    'description' => 'tmlab: allow IPsec traffic',
-]);
-
-$bad = 0;
-foreach (['swanctl' => $sw, 'ipsec' => $ipsec, 'filter' => $filter] as $name => $mdl) {
-    foreach ($mdl->performValidation() as $msg) {
-        echo "TMLAB-INVALID {$name} " . $msg->getField() . ": " . $msg->getMessage() . "\n";
-        $bad++;
-    }
-}
-if ($bad) {
-    Config::getInstance()->unlock();
-    exit(1);
-}
+tmlab_validate(['swanctl' => $sw, 'ipsec' => $ipsec]);
 $sw->serializeToConfig();
 $ipsec->serializeToConfig();
-$filter->serializeToConfig();
 Config::getInstance()->save();
 echo "TMLAB-OK " . count($in['connections']) . " connections\n";

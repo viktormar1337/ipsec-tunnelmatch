@@ -143,6 +143,17 @@ class Gns3:
             host = urlparse(self.url).hostname
         return host, n["console"], n.get("console_type")
 
+    def aux(self, pid, node_id):
+        """Docker nodes' auxiliary telnet console (GNS3 runs it with `docker exec`), or None."""
+        n = self.api("GET", f"/projects/{pid}/nodes/{node_id}")
+        port = n.get("aux") or (n.get("properties") or {}).get("aux")
+        if not port:
+            return None
+        host = n.get("console_host") or ""
+        if host in ("", "0.0.0.0", "::", "0:0:0:0:0:0:0:0"):
+            host = urlparse(self.url).hostname
+        return host, port
+
 
 # --------------------------------------------------------------------------- telnet console
 
@@ -615,6 +626,10 @@ class StrongSwan(Shell):
             try:
                 self.con.expect([r"[#$] ?$"], 10)
                 self.con.drain(1)
+                # the auxiliary console is busybox sh; use the container's bash instead
+                self.con.sendline("exec /bin/bash --norc --noprofile -i")
+                self.con.expect([r"[#$] ?$"], 15)
+                self.con.drain(1)
                 self.set_prompt()
                 return
             except TimeoutError:
@@ -855,6 +870,14 @@ def main():
     for nid in ids:
         n = plan["nodes"][nid]
         host, port, ctype = g.console(pid, by_name[NAMES[nid]]["node_id"])
+        if nid == "strongswan":
+            # The main console of a docker node goes through Docker's attach websocket, which
+            # gave no prompt with GNS3 2.2.61 on Ubuntu 24.04's Docker. The auxiliary console
+            # is a plain `docker exec`, so use that when there is one.
+            aux = g.aux(pid, by_name[NAMES[nid]]["node_id"])
+            if aux:
+                host, port = aux
+                log(f"{NAMES[nid]}: using the auxiliary console ({host}:{port})")
         logfile = os.path.join(RESULTS, f"{nid}.log")
         with open(logfile, "w", encoding="utf-8") as f:  # one run per log, not appended
             f.write(f"# {NAMES[nid]} console {host}:{port}, run started {meta['when']}\n")

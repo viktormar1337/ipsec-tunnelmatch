@@ -728,6 +728,20 @@ def write_report(meta, nodes, pairs):
 # --------------------------------------------------------------------------- main
 
 
+def check_docker_image(g, compute, image):
+    """The strongSwan node needs its image in the GNS3 server's Docker."""
+    try:
+        have = [i.get("image") for i in g.api("GET", f"/computes/{compute}/docker/images")]
+    except Exception as e:
+        sys.exit(f"Could not list Docker images on GNS3 compute '{compute}': {e}\n"
+                 "Is Docker installed on the GNS3 server, and is the GNS3 user in the docker group?")
+    want = image if ":" in image else image + ":latest"
+    if want not in have:
+        sys.exit(f"Docker image '{want}' not found on the GNS3 server. Build it there:\n"
+                 f"  docker build -t {want.split(':')[0]} lab/gns3/strongswan\n"
+                 f"Images GNS3 sees: {', '.join(sorted(have)) or 'none'}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default=None, help="lab config (default lab/gns3/lab.json, else lab.example.json)")
@@ -771,7 +785,15 @@ def main():
     templates = {}
     for nid in ids:
         n = plan["nodes"][nid]
-        t = g.ensure_docker_template(n["template"], n["image"], compute) if nid == "strongswan" and not opt.dry_run else g.template(n["template"])
+        if nid == "strongswan":
+            check_docker_image(g, compute, n["image"])
+            t = g.template(n["template"])
+            if not t and opt.dry_run:
+                t = {"name": n["template"] + " (created on the real run)"}
+            elif not t:
+                t = g.ensure_docker_template(n["template"], n["image"], compute)
+        else:
+            t = g.template(n["template"])
         if not t and nid != "strongswan":
             # the appliance wizard adds the version, e.g. "OPNsense" -> "OPNsense 26.1"
             close = [x for x in g.templates() if not x.get("builtin") and x["name"].startswith(n["template"] + " ")]

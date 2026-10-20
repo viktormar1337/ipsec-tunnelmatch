@@ -789,10 +789,23 @@ def main():
     with open(cfg_path, encoding="utf-8") as f:
         cfg = json.load(f)
     user_cfg = cfg_path
+    # nodes added to the lab after lab.json was copied: take their block from lab.example.json
+    with open(os.path.join(HERE, "lab.example.json"), encoding="utf-8") as f:
+        example = json.load(f)["nodes"]
+    added = [k for k in example if k not in cfg["nodes"]]
+    if added:
+        for k in added:
+            cfg["nodes"][k] = dict(example[k], enabled=False)
+        log(f"{os.path.basename(user_cfg)} has no section for {', '.join(added)}; using lab.example.json's "
+            "(off unless named in --nodes). Copy it into your config to change it.")
     if opt.nodes:
         keep = set(opt.nodes.split(","))
+        unknown = keep - set(cfg["nodes"])
+        if unknown:
+            sys.exit(f"--nodes: unknown node(s) {', '.join(sorted(unknown))}; known: {', '.join(cfg['nodes'])}")
         for k, n in cfg["nodes"].items():
-            n["enabled"] = n.get("enabled", True) and k in keep
+            n["enabled"] = k in keep
+    if opt.nodes or added:
         cfg_path = os.path.join(HERE, "out", "lab.selected.json")
         os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
         with open(cfg_path, "w", encoding="utf-8") as f:
@@ -801,7 +814,8 @@ def main():
     gen = ["node", os.path.join(HERE, "generate.js"), "--config", cfg_path]
     if opt.profile:
         gen += ["--profile", opt.profile]
-    subprocess.run(gen, check=True)
+    if subprocess.run(gen).returncode != 0:
+        sys.exit("Plan generation failed (message above).")
     with open(os.path.join(HERE, "out", "plan.json"), encoding="utf-8") as f:
         plan = json.load(f)
     secrets = sorted({c["psk"] for n in plan["nodes"].values() for key in ("connections", "tunnels")

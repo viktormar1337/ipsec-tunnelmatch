@@ -98,6 +98,21 @@
       "lan": "10.4.0.0/24",
       "lan_ip": "10.4.0.1",
       "boot_timeout": 300
+    },
+    "mikrotik": {
+      "enabled": true,
+      "template": "MikroTik CHR",
+      "wan_port": {
+        "adapter": 0,
+        "port": 0
+      },
+      "wan_if": "ether1",
+      "wan_ip": "203.0.113.16",
+      "lan": "10.6.0.0/24",
+      "lan_ip": "10.6.0.1",
+      "password": "TMlab-Admin-1",
+      "extra_config": [],
+      "boot_timeout": 600
     }
   }
 }

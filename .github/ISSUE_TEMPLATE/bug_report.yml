@@ -38,6 +38,7 @@ body:
         - Juniper SRX (Junos)
         - strongSwan
         - OPNsense / pfSense
+        - MikroTik RouterOS 7
     validations:
       required: true
 
@@ -55,6 +56,7 @@ body:
         - Juniper SRX (Junos)
         - strongSwan
         - OPNsense / pfSense
+        - MikroTik RouterOS 7
     validations:
       required: true
 

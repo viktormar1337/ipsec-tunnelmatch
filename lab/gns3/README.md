@@ -3,15 +3,15 @@
 This lab takes the configs the tool generates and runs them on real virtual appliances in GNS3, in a full mesh:
 
 ```
-                        TM-WAN (switch, 203.0.113.0/24)
-     ┌──────────────┬──────────────┬──────────────┬──────────────┐
-  TM-IOSXE        TM-ASA       TM-OPNSENSE    TM-PFSENSE    TM-STRONGSWAN
-  .11             .12           .13            .15           .14
-  Lo1 10.1.0.1    inside        LAN            LAN           lo
-                  10.2.0.1      10.3.0.1       10.5.0.1      10.4.0.1
+                              TM-WAN (switch, 203.0.113.0/24)
+     ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+  TM-IOSXE        TM-ASA       TM-OPNSENSE    TM-PFSENSE    TM-STRONGSWAN  TM-MIKROTIK
+  .11             .12           .13            .15           .14            .16
+  Lo1 10.1.0.1    inside        LAN            LAN           lo             bridge lan0
+                  10.2.0.1      10.3.0.1       10.5.0.1      10.4.0.1       10.6.0.1
 ```
 
-Every pair of nodes gets a policy-based tunnel (10 tunnels with all five nodes). For each pair the plan uses the **strongest common profile**, the same one the tool's "Use strongest profile both sides support" button picks. Between these platforms that is the recommended baseline: AES-256-GCM, PRF SHA-384, group 20, ESP AES-256-GCM, PFS group 20. `--profile minimum` runs AES-256-CBC / SHA-256 / group 14 instead.
+Every pair of nodes gets a policy-based tunnel (15 tunnels with all six nodes). For each pair the plan uses the **strongest common profile**, the same one the tool's "Use strongest profile both sides support" button picks. Between most of these platforms that is the recommended baseline (with MikroTik, IKE uses AES-256-CBC, since RouterOS has no GCM in phase 1): AES-256-GCM, PRF SHA-384, group 20, ESP AES-256-GCM, PFS group 20. `--profile minimum` runs AES-256-CBC / SHA-256 / group 14 instead.
 
 For every tunnel it checks:
 
@@ -32,6 +32,7 @@ It also checks that every config line was accepted: IOS-XE `%` errors, ASA `ERRO
 | Telnet console and strongSwan driver | In CI: two network namespaces stand in for two GNS3 nodes, and real tunnels come up with the tool's configs (`selftest.py`) |
 | pfSense config mapping | The config `pfsense_apply.php` writes was run through pfSense 2.7.2's own proposal code (`ipsec.inc`): it gives `aes256gcm128-sha384-ecp384` / `aes256gcm128-ecp384` (recommended) and `aes256-sha256-modp2048` (minimum), and the strongSwan lab negotiates the expected algorithms from that spelling |
 | OPNsense and strongSwan drivers | **Run on real images** (2026-10-20): GNS3 2.2.61 on Proxmox, OPNsense 26.1 ↔ strongSwan container, recommended profile. Tunnel up with IKE AES_GCM_16_256 / PRF_HMAC_SHA2_384 / ECP_384 and ESP AES_GCM_16_256, traffic both ways ([report](reference/2026-10-20-opnsense-strongswan.md)). The first runs found and fixed: enc0 registration before the IPsec rule, explicit WAN rules for IKE/NAT-T/ESP, the docker auxiliary console, telnet option handling, and the strongSwan file name |
+| MikroTik driver | Login flow (license prompt, forced password change), error detection and parsers tested against a simulated RouterOS console; **not yet run on a real CHR**. AES-GCM in phase 2 is generated with `auth-algorithms=null`, which this run should confirm |
 | IOS-XE, ASA and pfSense drivers | **Not yet run against real images.** Prompts, commands and output parsers follow Cisco and OPNsense documentation and the OPNsense source; the parsers are tested against sample output in that format, not output captured from a device |
 
 The first runs on real images will probably need small fixes in the drivers (a prompt or a show-command format). Please report what you find with the console logs in `lab/gns3/results/`.
@@ -46,7 +47,8 @@ The first runs on real images will probably need small fixes in the drivers (a p
   - **OPNsense** (nano/serial image, 24.7 or later): LAN on `vtnet0`, WAN on `vtnet1`, login `root` / `opnsense`.
   - **strongSwan**: build the image on the GNS3 host, `docker build -t tunnelmatch-strongswan lab/gns3/strongswan`. The lab creates the docker template itself if it is missing. ESP runs in the host kernel (XFRM).
   - **pfSense** (2.7.2): needs a one-time install first, see [pfSense](#pfsense-one-time-preparation) below.
-- About 14 GB RAM for all five nodes (C8000v 4 GB, ASAv 2 GB, OPNsense 2 GB, pfSense 2 GB, container minimal).
+  - **MikroTik CHR** (RouterOS 7, `chr-7.x.img` from mikrotik.com/download, free). Runs unlicensed at 1 Mbit/s per interface, plenty for the tests. The lab logs in as `admin` with an empty password on first boot and sets `password` from the config.
+- About 14.5 GB RAM for all six nodes (C8000v 4 GB, ASAv 2 GB, OPNsense 2 GB, pfSense 2 GB, CHR 384 MB, container minimal).
 
 ## pfSense: one-time preparation
 
@@ -116,6 +118,7 @@ All configs come from the tool's own generators (the same code the page runs, lo
 - **ASA**: one IKEv2 policy priority and one crypto map sequence per peer, `nameif outside/inside`, `management-access inside` so the ASA answers pings on its inside address through the tunnel, and routes per remote LAN.
 - **pfSense**: the tool's Tunnels field values (for example "AES256-GCM, key length 128 bits") are mapped to `config.xml` values (`aes256gcm`, keylen 128) by `generate.js` and written by `pfsense_apply.php`, followed by `/etc/rc.reload_all`.
 - **OPNsense**: the tool's Connections field values are read back into the MVC models (`OPNsense\IPsec\Swanctl` and `OPNsense\IPsec\IPsec`) by `opnsense_apply.php`, which runs on the firewall through the console shell. The models validate every value, so a proposal string the GUI would not offer fails the run. It also sets the interface addresses, turns off the bogon/private blocks on WAN (203.0.113.0/24 is a documentation range), enables IPsec and adds a pass rule on the IPsec interface.
+- **MikroTik**: the tool's RouterOS script per peer, flattened to one full-path command per line (`/ip ipsec profile add …`), after the WAN address, an empty bridge `lan0` for the LAN address and static routes. Login is `admin+ct200w` (no colours, no terminal detection, wide lines). RouterOS shows no IKE algorithms in `active-peers`, so for MikroTik the lab checks the IKE state, the ESP algorithm from `installed-sa`, and the IKE algorithms from the peer's side.
 - **strongSwan**: the tool's `swanctl.conf` per peer in `/etc/swanctl/conf.d/`, LAN address on `lo`, `charon-systemd` and `swanctl --load-all`.
 
 ## Self-test without GNS3

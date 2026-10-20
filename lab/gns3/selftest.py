@@ -109,6 +109,20 @@ peer address: 203.0.113.11
 """
 
 
+# RouterOS 7 print detail format as documented; not captured from a device.
+ROS_PEERS = """Flags: R - RESPONDER; N - NATT-PEER
+ 0    id="203.0.113.14" local-address=203.0.113.16 port=500 remote-address=203.0.113.14 port=500 state=established
+      side=initiator uptime=2m10s last-seen=5s ph2-total=1
+"""
+
+ROS_SAS = """Flags: S - SEEN-TRAFFIC; H - HW-AEAD; E - IKE
+ 0 SE  spi=0xC0FFEE01 src-address=203.0.113.14 dst-address=203.0.113.16 state=mature auth-algorithm=null
+       enc-algorithm=aes-gcm enc-key-size=288 add-lifetime=48m/1h replay=128 current-bytes=840
+ 1 SE  spi=0xC0FFEE02 src-address=203.0.113.16 dst-address=203.0.113.14 state=mature auth-algorithm=null
+       enc-algorithm=aes-gcm enc-key-size=288 add-lifetime=48m/1h replay=128 current-bytes=760
+"""
+
+
 def test_parsers():
     r = run.parse_cisco_ikev2(IOSXE_IKEV2, "203.0.113.12")
     check(r and r["ike"] == {"state": "READY", "encr": "AES-GCM-256", "prf": "SHA384", "integ": None, "dh": 20},
@@ -124,6 +138,11 @@ def test_parsers():
           f"ASA ikev2 sa detail: {r}")
     r = run.parse_cisco_ipsec(ASA_IPSEC)
     check(r == {"encaps": 5, "decaps": 5}, f"ASA ipsec sa: {r}")
+    r = run.parse_routeros_sas(ROS_PEERS, ROS_SAS, "203.0.113.16", "203.0.113.14")
+    check(r == {"ike": {"state": "ESTABLISHED"}, "esp": {"encr": "AES-GCM-256", "integ": None},
+                "counters": {"encaps": 760, "decaps": 840}}, f"RouterOS active-peers / installed-sa: {r}")
+    check(run.parse_routeros_sas(ROS_PEERS, ROS_SAS, "203.0.113.16", "203.0.113.99") is None, "RouterOS: unknown peer gives None")
+    check(run.ping_ok("  SEQ HOST    SIZE TTL TIME\n    sent=5 received=4 packet-loss=20% min-rtt=1ms") == (4, 5), "RouterOS ping")
     check(run.ping_ok("Success rate is 80 percent (4/5), round-trip min/avg/max = 1/2/4 ms") == (4, 5), "Cisco ping")
     check(run.ping_ok("5 packets transmitted, 5 packets received, 0.0% packet loss") == (5, 5), "FreeBSD ping")
     check(run.ping_ok("5 packets transmitted, 3 received, 40% packet loss, time 4005ms") == (3, 5), "Linux ping")

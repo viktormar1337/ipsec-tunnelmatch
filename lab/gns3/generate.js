@@ -33,6 +33,7 @@ const KINDS = {
   opnsense: { vendor: "opnsense", name: "OPNSENSE" },
   pfsense: { vendor: "opnsense", name: "PFSENSE" }, // the tool's OPNsense/pfSense platform, pfSense block
   strongswan: { vendor: "strongswan", name: "STRONGSWAN" },
+  mikrotik: { vendor: "mikrotik", name: "MIKROTIK" },
 };
 
 /* What the devices report, normalised the same way run.py normalises their output. */
@@ -256,6 +257,36 @@ function mergePfsense(node, tunnels) {
   };
 }
 
+/* MikroTik: flatten the tool's RouterOS script into one full-path command per line
+   ("/ip ipsec profile" + "add ..." -> "/ip ipsec profile add ..."), no comments. */
+function routerosCommands(text) {
+  const out = [];
+  let path = "";
+  const joined = text.replace(/\\\n\s*/g, " ");
+  for (const raw of joined.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    if (/^\/[\w /-]+$/.test(line)) { path = line; continue; }
+    out.push(line.startsWith("/") ? line : `${path} ${line}`);
+  }
+  return out;
+}
+
+function mergeMikrotik(node, tunnels) {
+  const lanPrefix = node.lan.split("/")[1];
+  const lines = [
+    "/system identity set name=TM-MIKROTIK",
+    `/ip address add address=${node.wan_ip}/${node.prefix} interface=${node.wan_if}`,
+    // the LAN address sits on an empty bridge, RouterOS's usual loopback
+    "/interface bridge add name=lan0",
+    `/ip address add address=${node.lan_ip}/${lanPrefix} interface=lan0`,
+    ...node.routes.map((r) => `/ip route add dst-address=${r.cidr} gateway=${r.via}`),
+    ...(node.extra_config || []),
+    ...tunnels.flatMap((t) => routerosCommands(t.text.replace(/<PSK>/g, t.psk))),
+  ];
+  return { lines };
+}
+
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
@@ -328,7 +359,7 @@ function main() {
     });
   }
 
-  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan };
+  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik };
   const planNodes = {};
   ids.forEach((id) => {
     const n = nodes[id];
@@ -366,4 +397,4 @@ if (require.main === module) {
   try { main(); } catch (e) { console.error(e.message); process.exit(1); }
 }
 
-module.exports = { parseOpnsense, parsePfsense };
+module.exports = { parseOpnsense, parsePfsense, routerosCommands };

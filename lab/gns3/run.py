@@ -31,8 +31,8 @@ from urllib.parse import urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 
-NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN"}
-LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150)}
+NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK"}
+LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250)}
 
 
 def log(msg):
@@ -387,11 +387,45 @@ def parse_swanctl_raw(raw, peer):
     return None
 
 
+def parse_routeros_sas(peers_text, sa_text, me, peer):
+    """`/ip ipsec active-peers print detail` and `/ip ipsec installed-sa print detail`.
+    RouterOS shows no IKE algorithms there, only the state; ESP comes from the installed SAs."""
+    entries = lambda t: [e for e in re.split(r"(?m)^\s*\d+\s+(?=[A-Z ]*\w+=)", t) if "=" in e]
+    field = lambda e, k: (re.search(r"(?:^|\s)" + re.escape(k) + r"=\"?([^\s\"]+)", e) or [None, None])[1]
+    ike = None
+    for e in entries(peers_text):
+        if field(e, "remote-address") in (peer, f"{peer}/32") or (field(e, "remote-address") or "").startswith(peer + ":"):
+            ike = {"state": (field(e, "state") or "").upper()}
+    if not ike:
+        return None
+    esp, counters = {}, {"encaps": 0, "decaps": 0}
+    for e in entries(sa_text):
+        host = lambda v: (v or "").split("/")[0].rsplit(":", 1)[0] if (v or "").count(":") == 1 else (v or "").split("/")[0]
+        src, dst = host(field(e, "src-address")), host(field(e, "dst-address"))
+        if {src, dst} != {me, peer}:
+            continue
+        enc, size = field(e, "enc-algorithm"), field(e, "enc-key-size")
+        if enc:
+            mode = "AES-GCM" if "gcm" in enc else "AES-CBC" if enc.startswith("aes") else enc.upper()
+            bits = int(size or 0)
+            if mode == "AES-GCM" and bits in (160, 224, 288):  # key size includes the 32-bit salt
+                bits -= 32
+            esp["encr"] = f"{mode}-{bits}"
+        auth = field(e, "auth-algorithm")
+        esp["integ"] = None if auth in (None, "null", "none") else _cisco_hash(auth)
+        b = int(field(e, "current-bytes") or 0)
+        counters["encaps" if dst == peer else "decaps"] += b
+    return {"ike": ike, "esp": esp, "counters": counters}
+
+
 def ping_ok(text):
     """Received count from Cisco, FreeBSD or Linux ping output."""
     m = re.search(r"Success rate is (\d+) percent \((\d+)/(\d+)\)", text)
     if m:
         return int(m.group(2)), int(m.group(3))
+    m = re.search(r"sent=(\d+) received=(\d+)", text)  # RouterOS /ping
+    if m:
+        return int(m.group(2)), int(m.group(1))
     m = re.search(r"(\d+) packets transmitted, (\d+) (?:packets )?received", text)
     if m:
         return int(m.group(2)), int(m.group(1))
@@ -665,7 +699,62 @@ class StrongSwan(Shell):
         return ping_ok(self.run(f"ping -c 5 -W 1 -I {src} {dst}", 60))
 
 
-DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan}
+class MikroTik(Driver):
+    """RouterOS 7 (CHR) over the serial console. admin+ct200w: no colours, no terminal
+    detection, wide lines so long commands do not wrap."""
+
+    prompt = r"\[[^\]\n]+@[^\]\n]+\] [^\n>]*> ?$"
+
+    def login(self, timeout):
+        pw = self.node.get("password", "")
+        tries = ["", pw]  # first boot: empty password, then the one we set
+        answers = [
+            (r"Login: ?$", None),
+            (r"Password: ?$", None),
+            (r"software license\? \[Y/n\]: ?$", "n"),
+            (r"(?:repeat|retype) new password[>:] ?$", pw),
+            (r"new password[>:] ?$", pw),
+            (r"[Pp]ress .?Enter.? to continue", ""),
+        ]
+        end = time.time() + timeout
+        self.con.sendline()
+        while time.time() < end:
+            try:
+                i, _, _ = self.con.expect([a[0] for a in answers] + [self.prompt], 20)
+            except TimeoutError:
+                self.con.sendline()
+                continue
+            if i == len(answers):
+                self.con.drain(2)
+                return
+            if i == 0:
+                self.con.sendline("admin+ct200w")
+            elif i == 1:
+                self.con.sendline(tries[0] if tries else pw)
+                if len(tries) > 1:
+                    tries.pop(0)
+            else:
+                self.con.sendline(answers[i][1])
+        raise TimeoutError("RouterOS did not reach the prompt")
+
+    def apply(self):
+        for line in self.node["lines"]:
+            out = self.run(line, 60)
+            for err in re.findall(r"(?mi)^.*(?:failure:|syntax error|expected end of command|bad command name|"
+                                  r"input does not match|no such item|invalid value|ambiguous value).*$", out):
+                self.errors.append(f"{line} → {err.strip()}")
+
+    def ping(self, src, dst):
+        return ping_ok(self.run(f"/ping {dst} src-address={src} count=5", 60))
+
+    def sas(self, peer):
+        me = self.node["wan_ip"]
+        peers = self.run("/ip ipsec active-peers print detail without-paging", 60)
+        sas = self.run("/ip ipsec installed-sa print detail without-paging", 60)
+        return parse_routeros_sas(peers, sas, me, peer)
+
+
+DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik}
 
 
 # --------------------------------------------------------------------------- checks
@@ -821,7 +910,8 @@ def main():
     secrets = sorted({c["psk"] for n in plan["nodes"].values() for key in ("connections", "tunnels")
                       for c in n.get("data", {}).get(key, [])} |
                      set(re.findall(r"pre-shared-key (\w+)", json.dumps(plan))) |
-                     set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))))
+                     set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))) |
+                     set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))))
 
     srv = plan["server"]
     g = Gns3(srv["url"], srv.get("user"), srv.get("password"))

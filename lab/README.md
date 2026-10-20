@@ -29,7 +29,7 @@ Only strongSwan runs here, so the lab verifies the crypto profiles, the reconcil
 Linux with root (network namespaces need it):
 
 ```sh
-sudo apt-get install strongswan-swanctl charon-systemd libcharon-extra-plugins libstrongswan-extra-plugins iproute2
+sudo apt-get install strongswan-swanctl charon-systemd libstrongswan-standard-plugins libcharon-extra-plugins libstrongswan-extra-plugins iproute2
 sudo node lab/run.js            # all scenarios
 sudo node lab/run.js --only pan # scenarios whose name contains "pan"
 sudo node lab/run.js --keep     # leave namespaces and logs in place for inspection

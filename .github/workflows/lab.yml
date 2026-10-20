@@ -28,7 +28,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            strongswan-swanctl charon-systemd libcharon-extra-plugins libstrongswan-extra-plugins iproute2 iputils-ping
+            strongswan-swanctl charon-systemd libstrongswan-standard-plugins libcharon-extra-plugins libstrongswan-extra-plugins \
+            iproute2 iputils-ping
           # The packaged service is not needed; the lab starts its own daemons.
           sudo systemctl stop strongswan || true
 

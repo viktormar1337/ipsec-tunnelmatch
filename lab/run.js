@@ -61,6 +61,9 @@ function preflight() {
   if (!charon) problems.push("charon-systemd is missing (apt install charon-systemd), or set CHARON=/path/to/charon");
   const libipsec = ["/usr/lib/ipsec/plugins", "/usr/lib/x86_64-linux-gnu/ipsec/plugins", "/usr/lib/aarch64-linux-gnu/ipsec/plugins"]
     .some((d) => fs.existsSync(path.join(d, "libstrongswan-kernel-libipsec.so")));
+  const pluginDirs = ["/usr/lib/ipsec/plugins", "/usr/lib/x86_64-linux-gnu/ipsec/plugins", "/usr/lib/aarch64-linux-gnu/ipsec/plugins"];
+  if (!pluginDirs.some((d) => fs.existsSync(path.join(d, "libstrongswan-openssl.so"))))
+    problems.push("strongSwan's openssl plugin is missing (apt install libstrongswan-standard-plugins); it provides AES-GCM and the ECP groups");
   if (!OPT.kernel && !libipsec) problems.push("kernel-libipsec plugin is missing (apt install libcharon-extra-plugins), or use --kernel");
   if (!OPT.kernel && !fs.existsSync("/dev/net/tun")) problems.push("/dev/net/tun is missing (needed for userspace ESP), or use --kernel");
   if (problems.length) {
@@ -437,6 +440,13 @@ async function main() {
     const r = await runScenario(bins, sc);
     results.push(r);
     log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}`);
+    if (process.env.GITHUB_ACTIONS) {
+      // Annotations show up on the run page and through the API.
+      const esc = (t) => String(t).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+      const title = esc(r.name).replace(/:/g, "%3A").replace(/,/g, "%2C");
+      if (r.ok) console.log(`::notice title=PASS ${title}::${esc(r.checks.length + " checks passed")}`);
+      else r.checks.filter((c) => !c.ok).forEach((c) => console.log(`::error title=FAIL ${title}::${esc(c.text)}`));
+    }
     r.checks.forEach((c) => log(`      ${c.ok ? "ok  " : "FAIL"} ${c.text}`));
     if (r.detail) log(`      log: ${r.detail}`);
   }

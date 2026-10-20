@@ -855,7 +855,10 @@ def main():
     for nid in ids:
         n = plan["nodes"][nid]
         host, port, ctype = g.console(pid, by_name[NAMES[nid]]["node_id"])
-        con = Console(host, port, os.path.join(RESULTS, f"{nid}.log"), secrets)
+        logfile = os.path.join(RESULTS, f"{nid}.log")
+        with open(logfile, "w", encoding="utf-8") as f:  # one run per log, not appended
+            f.write(f"# {NAMES[nid]} console {host}:{port}, run started {meta['when']}\n")
+        con = Console(host, port, logfile, secrets)
         d = DRIVERS[nid](n, plan, con)
         drivers[nid] = d
         nr = {"id": nid, "errors": d.errors}

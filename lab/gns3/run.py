@@ -49,13 +49,16 @@ class Gns3:
         self.url = url.rstrip("/")
         self.user, self.password = user, password
         self.token = None
-        self.v = None
+        # GNS3 3.x answers /v3/version without a login; 2.2 has no /v3 (or answers 401 to
+        # everything when auth is on), so anything else means v2 with basic auth.
+        self.v = "v3"
         try:
             ver = self._raw("GET", "/v3/version")
-            self.v = "v3"
-        except Exception:
-            ver = self._raw("GET", "/v2/version")
+        except urllib.error.URLError as e:
+            raise SystemExit(f"Cannot reach the GNS3 server at {self.url}: {e.reason}. Check server.url and that gns3server is running.")
+        except RuntimeError:
             self.v = "v2"
+            ver = self._raw("GET", "/v2/version")
         self.version = ver.get("version", "?")
         if self.v == "v3":
             r = self._raw("POST", "/v3/access/users/authenticate", {"username": user, "password": password})
@@ -67,14 +70,15 @@ class Gns3:
         req.add_header("Content-Type", "application/json")
         if self.token:
             req.add_header("Authorization", "Bearer " + self.token)
-        elif self.user and self.v == "v2":
+        elif self.user and self.v == "v2":  # 2.2 servers with auth = True in gns3_server.conf
             req.add_header("Authorization", "Basic " + base64.b64encode(f"{self.user}:{self.password}".encode()).decode())
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 raw = r.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as e:
-            raise RuntimeError(f"GNS3 {method} {path}: HTTP {e.code} {e.read().decode(errors='replace')[:300]}") from None
+            hint = " (check server.user and server.password in the lab config)" if e.code == 401 else ""
+            raise RuntimeError(f"GNS3 {method} {path}: HTTP {e.code}{hint} {e.read().decode(errors='replace')[:300]}") from None
 
     def api(self, method, path, body=None):
         return self._raw(method, f"/{self.v}{path}", body)

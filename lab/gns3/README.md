@@ -28,7 +28,7 @@ It also checks that every config line was accepted: IOS-XE `%` errors, ASA `ERRO
 | Part | Tested |
 |---|---|
 | Plan generation (`generate.js`) | In CI on every push |
-| GNS3 API client (v3) | Against GNS3 server 3.0.6: projects, nodes from templates, renaming, links, start, consoles, docker template creation |
+| GNS3 API client | Against GNS3 server 3.0.6 and 2.2.61 (with a login): projects, nodes from templates, renaming, links, start, consoles, docker template creation |
 | Telnet console and strongSwan driver | In CI: two network namespaces stand in for two GNS3 nodes, and real tunnels come up with the tool's configs (`selftest.py`) |
 | IOS-XE, ASA and OPNsense drivers | **Not yet run against real images.** Prompts, commands and output parsers follow Cisco and OPNsense documentation and the OPNsense source; the parsers are tested against sample output in that format, not output captured from a device |
 

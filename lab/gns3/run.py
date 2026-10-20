@@ -172,6 +172,7 @@ class Console:
         self.log = open(logfile, "a", encoding="utf-8")
         self._sb = False
         self._pending = b""
+        self._answered = {}  # (cmd, opt) -> reply already sent; never answer the same thing twice
 
     def close(self):
         try:
@@ -213,10 +214,15 @@ class Console:
                     self._pending = data[i:]
                     break
                 opt = data[i + 2]
-                if cmd == DO:
-                    reply += bytes([IAC, WONT, opt])
-                elif cmd == WILL:
-                    reply += bytes([IAC, DO if opt in (1, 3) else DONT, opt])  # accept ECHO and SGA
+                # Answer each request once. Some servers (GNS3's own) confirm every DO with
+                # another WILL, so answering confirmations again would loop forever.
+                if cmd in (DO, WILL) and (cmd, opt) not in self._answered:
+                    if cmd == DO:
+                        ans = bytes([IAC, WONT, opt])
+                    else:
+                        ans = bytes([IAC, DO if opt in (1, 3) else DONT, opt])  # accept ECHO and SGA
+                    self._answered[(cmd, opt)] = ans
+                    reply += ans
                 i += 3
             elif cmd == SB:
                 self._sb = True
@@ -267,11 +273,13 @@ class Console:
                 raise TimeoutError(f"none of {[p.pattern for p in pats]} within {timeout}s; last output: {self.buf[-300:]!r}")
             self._read()
 
-    def drain(self, quiet=1.0):
-        """Read until the line is quiet for `quiet` seconds, then clear the buffer."""
-        last = time.time()
-        while time.time() - last < quiet:
-            if self._read():
+    def drain(self, quiet=1.0, limit=10.0):
+        """Read until no text arrives for `quiet` seconds (at most `limit` seconds), then clear the buffer."""
+        start = last = time.time()
+        while time.time() - last < quiet and time.time() - start < limit:
+            before = len(self.buf)
+            self._read()
+            if len(self.buf) > before:
                 last = time.time()
         self.buf = ""
 

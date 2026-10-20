@@ -144,6 +144,24 @@
       "password": "vyos",
       "extra_config": [],
       "boot_timeout": 900
+    },
+    "openwrt": {
+      "enabled": true,
+      "template": "OpenWrt (tmlab)",
+      "wan_port": {
+        "adapter": 1,
+        "port": 0
+      },
+      "lan_port": {
+        "adapter": 0,
+        "port": 0
+      },
+      "wan_if": "eth1",
+      "lan_if": "eth0",
+      "wan_ip": "203.0.113.19",
+      "lan": "10.9.0.0/24",
+      "lan_ip": "10.9.0.1",
+      "boot_timeout": 300
     }
   }
 }

@@ -36,6 +36,7 @@ const KINDS = {
   mikrotik: { vendor: "mikrotik", name: "MIKROTIK" },
   vsrx: { vendor: "juniper", name: "VSRX" },
   vyos: { vendor: "vyos", name: "VYOS" },
+  openwrt: { vendor: "openwrt", name: "OPENWRT" },
 };
 
 /* What the devices report, normalised the same way run.py normalises their output. */
@@ -333,6 +334,31 @@ function mergeVyos(node, tunnels) {
   return { lines };
 }
 
+/* OpenWrt: network via UCI, then the tool's UCI commands (ipsec, firewall) per peer. */
+function mergeOpenwrt(node, tunnels) {
+  const lines = [
+    "[ -x /etc/init.d/swanctl ] || echo TMLAB-MISSING strongSwan is not installed, see the OpenWrt preparation in lab/gns3/README.md",
+    "uci set system.@system[0].hostname='TM-OPENWRT'",
+    "uci commit system",
+    "uci set network.wan.proto='static'",
+    `uci set network.wan.ipaddr='${node.wan_ip}'`,
+    `uci set network.wan.netmask='${mask(node.wan_ip, node.prefix)}'`,
+    `uci set network.lan.ipaddr='${node.lan_ip}'`,
+    `uci set network.lan.netmask='${maskOf(node.lan)}'`,
+    "uci commit network",
+    "/etc/init.d/network restart",
+    "sleep 8",
+    ...node.routes.map((r) => `ip route replace ${r.cidr} via ${r.via}`),
+  ];
+  tunnels.forEach((t) => {
+    t.text.replace(/<PSK>/g, t.psk).split("\n").map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#") && !/^\/etc\/init\.d\//.test(l))
+      .forEach((l) => lines.push(l));
+  });
+  lines.push("/etc/init.d/firewall restart", "/etc/init.d/swanctl restart", "sleep 3", "swanctl --list-conns | grep -c IKEv2");
+  return { shell: lines };
+}
+
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
@@ -405,7 +431,7 @@ function main() {
     });
   }
 
-  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx, vyos: mergeVyos };
+  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx, vyos: mergeVyos, openwrt: mergeOpenwrt };
   const planNodes = {};
   ids.forEach((id) => {
     const n = nodes[id];
@@ -431,6 +457,7 @@ function main() {
     let text;
     if (n.lines) text = n.lines.join("\n");
     else if (n.files) text = Object.entries(n.files).map(([f, c]) => `### ${f}\n${c}`).join("\n") + "\n### shell\n" + n.shell.join("\n");
+    else if (!n.data) text = n.shell.join("\n");
     else text = JSON.stringify(n.data, null, 2) + "\n### shell\n" + n.shell.join("\n");
     fs.writeFileSync(path.join(out, `${id}.txt`), text + "\n");
   });

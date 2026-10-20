@@ -84,6 +84,14 @@ const FIXED = [
     expect: "pass",
   },
   {
+    name: "OpenWrt proposal spelling, minimum (aes256-sha256-prfsha256-modp2048)",
+    state: profile(MINIMUM),
+    // what /etc/init.d/swanctl builds from the tool's UCI options
+    emulate: { A: { vendor: "openwrt" } },
+    vendors: { A: "openwrt", B: "strongswan" },
+    expect: "pass",
+  },
+  {
     name: "PAN-OS ↔ Azure, IKE GCM with group 20: PAN-OS uses PRF SHA-384, Azure SHA-384",
     state: profile(RECOMMENDED),
     // PAN-OS sends no integrity with IKE GCM and derives the PRF from the DH group.

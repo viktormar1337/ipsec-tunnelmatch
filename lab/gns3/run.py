@@ -31,8 +31,8 @@ from urllib.parse import urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 
-NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX", "vyos": "TM-VYOS"}
-LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0), "vyos": (500, 0)}
+NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX", "vyos": "TM-VYOS", "openwrt": "TM-OPENWRT"}
+LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0), "vyos": (500, 0), "openwrt": (-500, 250)}
 
 
 def log(msg):
@@ -899,7 +899,40 @@ class Vyos(Driver):
         return parse_swanctl_raw(self.run("sudo swanctl --list-sas --raw", 60), peer)
 
 
-DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx, "vyos": Vyos}
+class OpenWrt(Shell):
+    """OpenWrt over the serial console (root, no password by default); ash shell."""
+
+    def login(self, timeout):
+        end = time.time() + timeout
+        while time.time() < end:
+            self.con.sendline()
+            try:
+                i, _, _ = self.con.expect([r"activate this console", r"login: ?$", r"^root@[^\n]*# ?$"], 15)
+            except TimeoutError:
+                continue
+            if i == 1:
+                self.con.sendline("root")
+                continue
+            if i == 2:
+                self.con.drain(1)
+                self.set_prompt()
+                return
+        raise TimeoutError("OpenWrt gave no shell prompt")
+
+    def apply(self):
+        for cmd in self.node["shell"]:
+            out = self.run(cmd, 120)
+            for bad in re.findall(r"(?mi)^.*(?:TMLAB-MISSING|uci: |not found|invalid|error).*$", out):
+                self.errors.append(f"{cmd} → {bad.strip()}")
+        last = self.run("swanctl --list-conns | grep -c IKEv2", 30).strip().splitlines()
+        if not last or not last[0].strip().isdigit() or int(last[0]) == 0:
+            self.errors.append("swanctl lists no IKEv2 connections after the restart")
+
+    def ping(self, src, dst):
+        return ping_ok(self.run(f"ping -c 5 -W 1 -I {src} {dst}", 60))
+
+
+DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx, "vyos": Vyos, "openwrt": OpenWrt}
 
 
 # --------------------------------------------------------------------------- checks
@@ -1058,7 +1091,8 @@ def main():
                      set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'ascii-text \\"(\w+)\\"', json.dumps(plan))) |
-                     set(re.findall(r"secret '(\w+)'", json.dumps(plan))))
+                     set(re.findall(r"secret '(\w+)'", json.dumps(plan))) |
+                     set(re.findall(r"pre_shared_key='(\w+)'", json.dumps(plan))))
 
     srv = plan["server"]
     g = Gns3(srv["url"], srv.get("user"), srv.get("password"))

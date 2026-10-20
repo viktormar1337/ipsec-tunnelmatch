@@ -75,7 +75,7 @@ secrets {
 
   TM.register({
     id: "strongswan",
-    order: 7,
+    order: 8,
     label: "strongSwan (swanctl)",
     short: "strongSwan",
     modes: ["route", "policy"],

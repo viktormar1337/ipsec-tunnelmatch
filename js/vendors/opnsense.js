@@ -141,7 +141,7 @@ ${phase2}`;
 
   TM.register({
     id: "opnsense",
-    order: 8,
+    order: 9,
     label: "OPNsense / pfSense",
     short: "OPNsense/pfSense",
     modes: ["policy", "route"],

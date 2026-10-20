@@ -6,6 +6,9 @@
  *   - small helpers for networks, escaping and naming
  *   - the vendor registry (TM.register / TM.vendor / TM.vendorIds)
  *
+ * A vendor's verify lists may be keyed by field (p1enc, p1int, dh, p2enc, p2int, pfs)
+ * or by group (enc, int, dh, pfs); verifyNote is a string or (field, value) => string.
+ *
  * Plain scripts (no modules) so the tool also runs from a local file.
  */
 window.TM = (function () {

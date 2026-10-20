@@ -58,7 +58,7 @@
         <h3>Route-based · VTI</h3>
         <p>
           A <strong>Virtual Tunnel Interface</strong> is a logical interface bound to the IPsec tunnel:
-          <code>tunnel.10</code> on PAN-OS, <code>Tunnel10</code> on Cisco, the phase 1 interface on FortiGate,
+          <code>tunnel.10</code> on PAN-OS, <code>Tunnel10</code> on Cisco, <code>st0.0</code> on Juniper SRX, the phase 1 interface on FortiGate,
           an <code>xfrm</code> interface on Linux. Anything routed into it is encrypted, and decrypted traffic
           comes out of it like any other interface.
         </p>
@@ -80,7 +80,7 @@
         <h3>Mixing the two</h3>
         <p>
           When one side is policy-based, the route-based side has to narrow its selectors to the same subnet
-          pairs: proxy-IDs on PAN-OS, phase 2 selectors on FortiGate, <code>usePolicyBasedTrafficSelectors</code>
+          pairs: proxy-IDs on PAN-OS, traffic selectors on Juniper SRX, phase 2 selectors on FortiGate, <code>usePolicyBasedTrafficSelectors</code>
           on Azure, <code>local_ts</code>/<code>remote_ts</code> on strongSwan.
         </p>
         <p>
@@ -201,6 +201,7 @@
 <script src="js/vendors/meraki.js"></script>
 <script src="js/vendors/iosxe.js"></script>
 <script src="js/vendors/asa.js"></script>
+<script src="js/vendors/juniper.js"></script>
 <script src="js/vendors/strongswan.js"></script>
 <script src="js/vendors/opnsense.js"></script>
 <script src="js/analyze.js"></script>

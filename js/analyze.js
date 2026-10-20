@@ -58,7 +58,14 @@
       const v = TM.vendor(S[k].vendor);
       const group = field.replace(/^p[12]/, ""); // verify lists are keyed dh / pfs
       if (!v.supports[field].includes(value)) add("err", `${label} is not supported by ${v.label} (side ${k}).`, "crypto");
-      else if (v.verify[group] && v.verify[group].includes(value)) add("warn", `${label} on ${v.short} (side ${k}): ${v.verifyNote}`, "verify");
+      else {
+        // verify lists may be keyed by field (p1int) or by group (int, dh, pfs)
+        const list = v.verify[field] || v.verify[group];
+        if (list && list.includes(value)) {
+          const note = typeof v.verifyNote === "function" ? v.verifyNote(field, value) : v.verifyNote;
+          add("warn", `${label} on ${v.short} (side ${k}): ${note}`, "verify");
+        }
+      }
     });
     supported("p1enc", S.p1enc, "Phase 1 encryption " + encLabel(S.p1enc));
     supported("p1int", S.p1int, (isGcm(S.p1enc) ? "PRF " : "Phase 1 integrity ") + intLabel(S.p1int));

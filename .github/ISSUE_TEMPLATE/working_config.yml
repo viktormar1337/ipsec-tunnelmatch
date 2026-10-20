@@ -21,6 +21,7 @@ body:
         - Cisco Meraki MX
         - Cisco IOS-XE
         - Cisco ASA
+        - Juniper SRX (Junos)
         - strongSwan (swanctl)
         - OPNsense / pfSense
     validations:
@@ -30,7 +31,7 @@ body:
     id: side-a-version
     attributes:
       label: Side A OS / firmware version
-      description: Exact version, for example PAN-OS 11.1.6-h3, MX 19.2.7, FortiOS 7.4.5, IOS-XE 17.12.4, strongSwan 6.0.1. For Azure, the gateway SKU and generation (for example VpnGw2AZ, Generation 2).
+      description: Exact version, for example PAN-OS 11.1.6-h3, MX 19.2.7, FortiOS 7.4.5, IOS-XE 17.12.4, Junos 23.4R2-S3, strongSwan 6.0.1. For Azure, the gateway SKU and generation (for example VpnGw2AZ, Generation 2).
       placeholder: PAN-OS 11.1.6-h3
     validations:
       required: true
@@ -39,7 +40,7 @@ body:
     id: side-a-model
     attributes:
       label: Side A model (optional)
-      placeholder: PA-3410, MX85, FG-100F, VM-Series
+      placeholder: PA-3410, MX85, FG-100F, SRX345, VM-Series
 
   - type: dropdown
     id: vpn-type-a
@@ -62,6 +63,7 @@ body:
         - Cisco Meraki MX
         - Cisco IOS-XE
         - Cisco ASA
+        - Juniper SRX (Junos)
         - strongSwan (swanctl)
         - OPNsense / pfSense
     validations:

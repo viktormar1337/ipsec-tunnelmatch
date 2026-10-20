@@ -21,10 +21,11 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 | Fortinet FortiGate | FortiOS CLI | Syntax reference |
 | Cisco IOS-XE | CLI (VTI or crypto map) | Syntax reference |
 | Cisco ASA | CLI (VTI or crypto map) | Syntax reference |
+| Juniper SRX (Junos) | `set` commands (st0, traffic selectors) | Verified |
 | strongSwan | `swanctl.conf` | Syntax reference |
 | OPNsense / pfSense | Connections fields / Tunnels fields | Syntax reference |
 
-"Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
+"Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper 2026-10-20). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
 
 IKEv2 only: every supported platform does IKEv2.
 

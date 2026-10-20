@@ -19,6 +19,7 @@ body:
         - Cisco Meraki MX
         - Cisco IOS-XE
         - Cisco ASA
+        - Juniper SRX (Junos)
         - strongSwan
         - OPNsense / pfSense
     validations:

@@ -4,12 +4,12 @@
  * IPsec Tunnelmatch GNS3 lab: applies the plan to an OPNsense node.
  *
  *   php opnsense_apply.php /tmp/tmlab.json ipsec    interfaces, connections, keys
- *   php -r 'require_once("config.inc"); write_config("...");'   registers enc0
+ *   /usr/local/sbin/pluginctl -i                     registers enc0
  *   php opnsense_apply.php /tmp/tmlab.json filter   pass rule on the IPsec interface
  *
  * Two passes, because OPNsense only offers the IPsec interface (enc0) as a rule
  * interface once an enabled connection is saved and the legacy config writer has
- * registered the plugin interfaces (plugins_interfaces() in write_config()).
+ * registered the plugin interfaces (pluginctl -i, plugins_interfaces() in the core).
  *
  * Runs on the firewall itself (console shell, option 8). Uses the same MVC models
  * the GUI and API use (OPNsense\IPsec\Swanctl and OPNsense\IPsec\IPsec), so the

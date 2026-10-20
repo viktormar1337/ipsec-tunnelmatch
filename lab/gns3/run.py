@@ -589,7 +589,7 @@ class OpnSense(FreeBsdFirewall):
     # write_config() has registered the plugin interfaces
     apply_steps = [
         "php /tmp/tmlab_apply.php /tmp/tmlab.json ipsec",
-        """php -r 'require_once("config.inc"); write_config("tmlab: register the IPsec interface");'""",
+        "/usr/local/sbin/pluginctl -i",  # OPNsense's own "register plugin interfaces and save"
         "php /tmp/tmlab_apply.php /tmp/tmlab.json filter",
     ]
     reload_cmds = ["/usr/local/etc/rc.reload_all", "/usr/local/sbin/pluginctl -c ipsec"]

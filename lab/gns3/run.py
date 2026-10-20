@@ -158,7 +158,9 @@ class Gns3:
 # --------------------------------------------------------------------------- telnet console
 
 IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
-ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Z0-9]|\x1b[=>]")
+# CSI sequences, OSC titles, charset selects and single-character escapes such as ESC 7 / ESC 8
+# (save/restore cursor, which pfSense's resizewin sends around its terminal-size query)
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Z0-9]|\x1b[78=>DEHMNOZc]|\x07")
 
 
 class Console:
@@ -657,7 +659,7 @@ class PfSense(FreeBsdFirewall):
     apply_script = "pfsense_apply.php"
     reload_cmds = ["/etc/rc.reload_all"]
     # [2.7.2-RELEASE][root@pfSense.home.arpa]/root:
-    shell_prompt = r"\]/\S*: $|^\S*@\S*:.*[#%$] $|^# $"
+    shell_prompt = r"\]/\S*:\s*$|^\S*@\S*:.*[#%$] $|^# $"
 
 
 class StrongSwan(Shell):

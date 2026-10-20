@@ -18,7 +18,7 @@ Scenarios (`lab/scenarios.js`):
 - **Baseline profiles**: recommended (AES-256-GCM, SHA-384, group 20), minimum (AES-256-CBC, SHA-256, group 14) and group 19.
 - **Strongest common profile for every platform pair**, as picked by the tool's "Use strongest profile" button, grouped by identical profile.
 - **Platform emulation**: PAN-OS ↔ Azure with IKE GCM. PAN-OS derives the IKE PRF from the DH group, so the lab sends what PAN-OS would send. With group 20 it must work; with group 19 it must fail, matching the error the tool shows.
-- **OPNsense proposal spelling**: the recommended and minimum profiles with the strings OPNsense's proposal list offers (`aes256gcm16-sha384-ecp384`, no `prf`), to prove strongSwan negotiates the same algorithms from them.
+- **OPNsense proposal spelling**: the recommended and minimum profiles with the strings OPNsense's proposal list offers (`aes256gcm16-sha384-ecp384`, no `prf`), to prove strongSwan negotiates the same algorithms from them. The same for pfSense's spelling (`aes256gcm128-…`, what pfSense 2.7.2 generates from the tool's fields).
 - **Negative controls**: a DH group mismatch and an ESP mismatch that must fail, proving the lab catches mismatches.
 
 ## What it does not cover
@@ -45,4 +45,4 @@ The lab only touches the two namespaces it creates (`tml<pid>a` and `tml<pid>b`)
 
 ## Vendor images (GNS3)
 
-[`gns3/`](gns3/README.md) runs the same idea on real appliances in GNS3: Cisco Catalyst 8000v (IOS-XE), Cisco ASAv, OPNsense and a strongSwan container, in a full mesh with the strongest common profile per pair. It needs your own GNS3 server and images, so it is not part of the automated run; CI only checks its plan and runs its strongSwan driver against network namespaces.
+[`gns3/`](gns3/README.md) runs the same idea on real appliances in GNS3: Cisco Catalyst 8000v (IOS-XE), Cisco ASAv, OPNsense, pfSense and a strongSwan container, in a full mesh with the strongest common profile per pair. It needs your own GNS3 server and images, so it is not part of the automated run; CI only checks its plan and runs its strongSwan driver against network namespaces.

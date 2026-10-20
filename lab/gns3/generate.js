@@ -31,6 +31,7 @@ const KINDS = {
   iosxe: { vendor: "iosxe", name: "IOSXE" },
   asa: { vendor: "asa", name: "ASA" },
   opnsense: { vendor: "opnsense", name: "OPNSENSE" },
+  pfsense: { vendor: "opnsense", name: "PFSENSE" }, // the tool's OPNsense/pfSense platform, pfSense block
   strongswan: { vendor: "strongswan", name: "STRONGSWAN" },
 };
 
@@ -192,6 +193,69 @@ function mergeOpnsense(node, tunnels) {
   };
 }
 
+/* pfSense: the tool writes Tunnels GUI field values; map them to config.xml values. */
+function parsePfsense(text) {
+  const out = { p1: {}, p2: [] };
+  let cur = null;
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\s{2,}\([^)]*\)\s*$/, "");
+    if (/^Phase 1\s*$/.test(line)) { cur = out.p1; continue; }
+    if (/^Phase 2 #\d+/.test(line)) { cur = {}; out.p2.push(cur); continue; }
+    const m = line.match(/^\s+([A-Za-z][A-Za-z -]*?) \.{2,} (.+?)\s*$/);
+    if (m && cur) cur[m[1]] = m[2];
+  }
+  return out;
+}
+
+function mergePfsense(node, tunnels) {
+  const map = TM.vendor("opnsense").pfsenseConfig;
+  const conns = tunnels.map((t) => {
+    const block = t.blocks.find((b) => /pfSense/.test(b.title));
+    const c = parsePfsense(block.text);
+    const need = (o, k, table) => {
+      const v = o[k];
+      if (v === undefined) throw new Error(`pfSense output for ${t.peer}: field "${k}" not found`);
+      if (table && table[v] === undefined) throw new Error(`pfSense output for ${t.peer}: unknown ${k} "${v}"`);
+      return table ? table[v] : v;
+    };
+    const dpd = need(c.p1, "Dead Peer Detection").match(/delay (\d+) s, max failures (\d+)/);
+    const cidr = (v) => { const [address, netbits] = v.split("/"); return { type: "network", address, netbits }; };
+    return {
+      descr: `tmlab ${t.peer}`,
+      remote: need(c.p1, "Remote gateway"),
+      psk: t.psk,
+      enc: need(c.p1, "Encryption", map.enc),
+      hash: need(c.p1, "Hash", map.int1),
+      dhgroup: String(parseInt(need(c.p1, "DH key group"), 10)),
+      rekey_time: need(c.p1, "Rekey Time"),
+      lifetime: need(c.p1, "Life Time"),
+      dpd_delay: dpd[1],
+      dpd_maxfail: dpd[2],
+      phase2: c.p2.map((p) => {
+        const hash = need(p, "Hash");
+        const pfs = need(p, "PFS key group");
+        return {
+          localid: cidr(need(p, "Local network")),
+          remoteid: cidr(need(p, "Remote network")),
+          enc: need(p, "Encryption", map.enc),
+          hash: /^\(none/.test(hash) ? null : need(p, "Hash", map.int2),
+          pfsgroup: pfs === "off" ? "0" : String(parseInt(pfs, 10)),
+          rekey_time: need(p, "Rekey Time"),
+          lifetime: need(p, "Life Time"),
+        };
+      }),
+    };
+  });
+  return {
+    data: {
+      wan_if: node.wan_if, wan_ip: node.wan_ip, wan_prefix: node.prefix,
+      lan_if: node.lan_if, lan_ip: node.lan_ip, lan_prefix: Number(node.lan.split("/")[1]),
+      tunnels: conns,
+    },
+    shell: node.routes.map((r) => `route add -net ${r.cidr} ${r.via}`),
+  };
+}
+
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
@@ -262,7 +326,7 @@ function main() {
     });
   }
 
-  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, strongswan: mergeStrongswan };
+  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan };
   const planNodes = {};
   ids.forEach((id) => {
     const n = nodes[id];
@@ -300,4 +364,4 @@ if (require.main === module) {
   try { main(); } catch (e) { console.error(e.message); process.exit(1); }
 }
 
-module.exports = { parseOpnsense };
+module.exports = { parseOpnsense, parsePfsense };

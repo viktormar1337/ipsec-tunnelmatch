@@ -61,6 +61,14 @@ const FIXED = [
     expect: "pass",
   },
   {
+    name: "pfSense proposal spelling, recommended (aes256gcm128-sha384-ecp384 / aes256gcm128-ecp384)",
+    state: profile(RECOMMENDED),
+    // what pfSense 2.7.2's ipsec.inc generates from the tool's pfSense fields (AES256-GCM, key length 128 bits)
+    emulate: { A: { proposals: "aes256gcm128-sha384-ecp384", esp: "aes256gcm128-ecp384" } },
+    vendors: { A: "opnsense", B: "strongswan" },
+    expect: "pass",
+  },
+  {
     name: "PAN-OS ↔ Azure, IKE GCM with group 20: PAN-OS uses PRF SHA-384, Azure SHA-384",
     state: profile(RECOMMENDED),
     // PAN-OS sends no integrity with IKE GCM and derives the PRF from the DH group.

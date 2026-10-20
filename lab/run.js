@@ -83,7 +83,8 @@ function preflight() {
 
 const SW = {
   enc: { aes128: ["AES_CBC", 128], aes192: ["AES_CBC", 192], aes256: ["AES_CBC", 256], aes128gcm: ["AES_GCM_16", 128], aes256gcm: ["AES_GCM_16", 256] },
-  token: { aes128: "aes128", aes192: "aes192", aes256: "aes256", aes128gcm16: "aes128gcm", aes256gcm16: "aes256gcm" },
+  // aes256gcm128 is pfSense's spelling of aes256gcm16 (ICV length in bits)
+  token: { aes128: "aes128", aes192: "aes192", aes256: "aes256", aes128gcm16: "aes128gcm", aes256gcm16: "aes256gcm", aes128gcm128: "aes128gcm", aes256gcm128: "aes256gcm" },
   integ: { sha1: "HMAC_SHA1_96", sha256: "HMAC_SHA2_256_128", sha384: "HMAC_SHA2_384_192", sha512: "HMAC_SHA2_512_256", md5: "HMAC_MD5_96" },
   prf: { sha1: "PRF_HMAC_SHA1", sha256: "PRF_HMAC_SHA2_256", sha384: "PRF_HMAC_SHA2_384", sha512: "PRF_HMAC_SHA2_512", md5: "PRF_HMAC_MD5" },
   dh: { modp1024: "MODP_1024", modp1536: "MODP_1536", modp2048: "MODP_2048", modp3072: "MODP_3072", ecp256: "ECP_256", ecp384: "ECP_384", ecp521: "ECP_521", modp2048s256: "MODP_2048_256" },

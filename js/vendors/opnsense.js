@@ -9,16 +9,32 @@
   "use strict";
   const { isGcm, spell, ALL } = TM;
 
-  /* pfSense GUI labels (Tunnels > Phase 1 / Phase 2). */
+  /* pfSense 2.7 (Tunnels > Phase 1 / Phase 2): GUI labels and the config.xml values behind
+     them, from ipsec.inc ($p1_ealgos, $p1_halgos, $p2_halgos, $p1_dhgroups). For AES-GCM the
+     "key length" field is the ICV length; 128 bits gives aes256gcm16. No 3DES or MD5. */
   const PF_DH = {
-    2: "2 (1024 bits)", 5: "5 (1536 bits)", 14: "14 (2048 bits)", 15: "15 (3072 bits)",
-    19: "19 (nist ecp256)", 20: "20 (nist ecp384)", 21: "21 (nist ecp521)", 24: "24 (2048(sub 256) bits)",
+    2: "2 (1024 bit)", 5: "5 (1536 bit)", 14: "14 (2048 bit)", 15: "15 (3072 bit)",
+    19: "19 (nist ecp256)", 20: "20 (nist ecp384)", 21: "21 (nist ecp521)", 24: "24 (2048(sub 256) bit)",
   };
+  const PF_ENC = {
+    aes128: { label: "AES, key length 128 bits", name: "aes", keylen: 128 },
+    aes192: { label: "AES, key length 192 bits", name: "aes", keylen: 192 },
+    aes256: { label: "AES, key length 256 bits", name: "aes", keylen: 256 },
+    aes128gcm: { label: "AES128-GCM, key length 128 bits", name: "aes128gcm", keylen: 128 },
+    aes256gcm: { label: "AES256-GCM, key length 128 bits", name: "aes256gcm", keylen: 128 },
+  };
+  const PF_INT = { sha1: "SHA1", sha256: "SHA256", sha384: "SHA384", sha512: "SHA512" };
   const PF = {
-    enc: { aes128: "AES 128 bits", aes192: "AES 192 bits", aes256: "AES 256 bits", aes128gcm: "AES128-GCM16", aes256gcm: "AES256-GCM16", "3des": "3DES" },
-    int: { sha1: "SHA1", sha256: "SHA256", sha384: "SHA384", sha512: "SHA512", md5: "MD5" },
+    enc: Object.fromEntries(Object.entries(PF_ENC).map(([k, v]) => [k, v.label])),
+    int: PF_INT,
     dh: (n) => PF_DH[n],
     pfs: (n) => (n ? PF_DH[n] : "off"),
+  };
+  /* For the lab: GUI label back to config.xml values. */
+  const PF_CONFIG = {
+    enc: Object.fromEntries(Object.values(PF_ENC).map((v) => [v.label, { name: v.name, keylen: v.keylen }])),
+    int1: Object.fromEntries(Object.entries(PF_INT).map(([k, v]) => [v, k])),
+    int2: Object.fromEntries(Object.entries(PF_INT).map(([k, v]) => [v, "hmac_" + k])),
   };
 
   /* OPNsense proposal spelling (IPsecProposalField). AEAD in phase 1 is enc-prf-dh with no
@@ -143,22 +159,28 @@ ${psk}${vti}${connection}${routing}${firewall}${switched}`;
   Mode ................... ${route ? "Routed (VTI)" : "Tunnel IPv4"}
   Local network .......... ${l.text}
   Remote network ......... ${r.text}
-  Encryption ............. ${PF.enc[S.p2enc]}
-  Hash ................... ${isGcm(S.p2enc) ? "(none, GCM)" : PF.int[S.p2int]}
+  Encryption ............. ${spell(PF.enc, S.p2enc)}
+  Hash ................... ${isGcm(S.p2enc) ? "(none, GCM)" : spell(PF.int, S.p2int)}
   PFS key group .......... ${PF.pfs(S.pfs)}
-  Lifetime ............... ${S.p2life}`).join("\n\n");
+  Rekey Time ............. ${S.p2life}
+  Life Time .............. ${Math.floor(S.p2life / 0.9)}   (must be larger than Rekey Time)`).join("\n\n");
 
     return `pfSense, side ${c.k}: VPN > IPsec > Tunnels (Phase 1 / Phase 2)
+(pfSense 2.7 field names)
 
 Phase 1
   Key Exchange version ... IKEv2
+  Interface .............. WAN
   Remote gateway ......... ${c.peer.ip}
   Authentication ......... Mutual PSK
+  My identifier .......... My IP address
+  Peer identifier ........ Peer IP address
   Pre-Shared Key ......... ${TM.PSK}
-  Encryption ............. ${PF.enc[S.p1enc]}
-  Hash ................... ${PF.int[S.p1int]}${isGcm(S.p1enc) ? " (PRF)" : ""}
-  DH key group ........... ${PF.dh(S.dh)}
-  Lifetime ............... ${S.p1life}
+  Encryption ............. ${spell(PF.enc, S.p1enc)}
+  Hash ................... ${spell(PF.int, S.p1int)}${isGcm(S.p1enc) ? "   (used as the PRF with GCM)" : ""}
+  DH key group ........... ${spell(PF.dh, S.dh)}
+  Rekey Time ............. ${S.p1life}
+  Life Time .............. ${Math.floor(S.p1life / 0.9)}   (must be larger than Rekey Time)
   Dead Peer Detection .... delay ${S.dpdInt} s, max failures ${S.dpdRetry}
 
 ${phase2}`;
@@ -167,9 +189,14 @@ ${phase2}`;
   function checks({ S, k, add }) {
     const p1 = ike(S), p2 = esp(S);
     if (!opnValid(1, p1))
-      add("err", `OPNsense (side ${k}): the IKE proposal ${p1} is not in the Connections proposal list, so it cannot be selected. pfSense Tunnels may still accept the separate values.`, "crypto");
+      add("err", `OPNsense (side ${k}): the IKE proposal ${p1} is not in the Connections proposal list, so it cannot be selected.`, "crypto");
     if (!opnValid(2, p2))
       add("err", `OPNsense (side ${k}): the ESP proposal ${p2} is not in the Connections proposal list, so it cannot be selected. Without PFS, only aes256gcm16, aes256-sha1 and aes256-sha256 exist.${S.pfs ? "" : " Turn on PFS (group 14 or higher)."}`, "crypto");
+  }
+
+  function notes({ S, add }) {
+    if (S.p1enc === "3des" || S.p2enc === "3des" || S.p1int === "md5" || (!isGcm(S.p2enc) && S.p2int === "md5"))
+      add("warn", "pfSense 2.7 no longer offers 3DES or MD5 for IPsec.", "crypto");
   }
 
   function generate(c) {
@@ -209,12 +236,15 @@ ${phase2}`;
       dpd: `DPD delay ${S.dpdInt} (pfSense: max failures ${S.dpdRetry})`,
     }),
     checks,
+    notes,
     generate,
     proposals: { ike, esp, valid: opnValid },
+    pfsenseConfig: PF_CONFIG,
     sources: {
       status: "Syntax reference",
-      used: "OPNsense Connections model: pre-shared keys, connection general settings, local/remote authentication, children, virtual tunnel interfaces, gateways and routes. Proposal strings and the set of selectable combinations come from IPsecProposalField in opnsense/core (checked 2026-10-20): no 3DES, MD5 or group 24, and without PFS only aes256gcm16, aes256-sha1 and aes256-sha256. pfSense output keeps the Tunnels (phase 1/phase 2) layout.",
+      used: "OPNsense Connections model: pre-shared keys, connection general settings, local/remote authentication, children, virtual tunnel interfaces, gateways and routes. Proposal strings and the set of selectable combinations come from IPsecProposalField in opnsense/core (checked 2026-10-20): no 3DES, MD5 or group 24, and without PFS only aes256gcm16, aes256-sha1 and aes256-sha256. pfSense output uses the 2.7 Tunnels fields (Rekey Time and Life Time, GCM key length as ICV, no 3DES or MD5), from ipsec.inc and the phase 1/2 pages in pfsense/pfsense RELENG_2_7_2.",
       links: [
+        ["pfSense 2.7.2: ipsec.inc (algorithm tables and swanctl generation)", "https://github.com/pfsense/pfsense/blob/RELENG_2_7_2/src/etc/inc/ipsec.inc"],
         ["OPNsense core: IPsecProposalField (proposal list)", "https://github.com/opnsense/core/blob/master/src/opnsense/mvc/app/models/OPNsense/IPsec/FieldTypes/IPsecProposalField.php"],
         ["OPNsense: IPsec route-based (VTI) PSK setup (Connections)", "https://docs.opnsense.org/manual/how-tos/ipsec-s2s-conn-route.html"],
         ["OPNsense: Virtual Private Networking overview", "https://docs.opnsense.org/manual/vpnet.html"],

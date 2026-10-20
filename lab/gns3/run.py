@@ -31,8 +31,8 @@ from urllib.parse import urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 
-NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "strongswan": "TM-STRONGSWAN"}
-LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "strongswan": (-300, 150)}
+NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN"}
+LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150)}
 
 
 def log(msg):
@@ -522,14 +522,22 @@ class Shell(Driver):
         return parse_swanctl_raw(self.run("swanctl --list-sas --raw", 60), peer)
 
 
-class OpnSense(Shell):
+class FreeBsdFirewall(Shell):
+    """OPNsense and pfSense: console menu, option 8 for a shell, then a PHP script that
+    writes the plan into the firewall's own config, and a full reload."""
+
+    product = "firewall"
+    apply_script = None
+    reload_cmds = []
+    shell_prompt = r"^\S*@\S*:.*[#%$] $|^# $"
+
     def login(self, timeout):
-        user, pw = self.node.get("user", "root"), self.node.get("password", "opnsense")
+        user, pw = self.node.get("user", "root"), self.node.get("password", "")
         answers = [
             (r"login:\s*$", user),
             (r"^Password:\s*$", pw),
             (r"Enter an option:\s*$", "8"),
-            (r"^\S*@\S*:.*[#%$] $|^# $", "/bin/sh"),
+            (self.shell_prompt, "/bin/sh"),
         ]
         end = time.time() + timeout
         self.con.sendline()
@@ -543,32 +551,50 @@ class OpnSense(Shell):
             if i == 3:
                 self.set_prompt()
                 return
-        raise TimeoutError("OPNsense did not reach a shell")
+        raise TimeoutError(f"{self.product} did not reach a shell")
 
     def apply(self):
         decode = "openssl base64 -d -in {src} -out {dst}"
-        with open(os.path.join(HERE, "opnsense_apply.php"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, self.apply_script), encoding="utf-8") as f:
             self.write_file("/tmp/tmlab_apply.php", f.read(), decode)
         self.write_file("/tmp/tmlab.json", json.dumps(self.node["data"]), decode)
         out = self.run("php /tmp/tmlab_apply.php /tmp/tmlab.json; echo TMLAB-EXIT=$?", 300)
+        self.run("rm -f /tmp/tmlab.json /tmp/tmlab.json.b64")  # holds the lab's pre-shared keys
         for bad in re.findall(r"(?m)^TMLAB-INVALID.*$", out):
             self.errors.append(bad)
         if "TMLAB-OK" not in out:
-            self.errors.append("OPNsense model update failed: " + out.strip()[-300:])
+            self.errors.append(f"{self.product} config update failed: " + out.strip()[-300:])
             return
-        self.run("/usr/local/etc/rc.reload_all", 600)
-        self.run("/usr/local/sbin/pluginctl -c ipsec", 300)
+        for cmd in self.reload_cmds:
+            self.run(cmd, 600)
         for cmd in self.node["shell"]:
             self.run(cmd, 30)
-        self.run("rm -f /tmp/tmlab.json /tmp/tmlab.json.b64")
         conns = self.run("swanctl --list-conns", 60)
-        want = len(self.node["data"]["connections"])
+        want = len(self.node["data"].get("connections") or self.node["data"].get("tunnels") or [])
         got = len(re.findall(r"(?m)^\S+: IKEv2", conns))
         if got < want:
             self.errors.append(f"swanctl lists {got} IKEv2 connections, expected {want}")
 
     def ping(self, src, dst):
         return ping_ok(self.run(f"ping -c 5 -W 1000 -S {src} {dst}", 60))
+
+
+class OpnSense(FreeBsdFirewall):
+    product = "OPNsense"
+    apply_script = "opnsense_apply.php"
+    reload_cmds = ["/usr/local/etc/rc.reload_all", "/usr/local/sbin/pluginctl -c ipsec"]
+
+    def __init__(self, node, plan, con):
+        super().__init__(node, plan, con)
+        self.node.setdefault("password", "opnsense")
+
+
+class PfSense(FreeBsdFirewall):
+    product = "pfSense"
+    apply_script = "pfsense_apply.php"
+    reload_cmds = ["/etc/rc.reload_all"]
+    # [2.7.2-RELEASE][root@pfSense.home.arpa]/root:
+    shell_prompt = r"\]/\S*: $|^\S*@\S*:.*[#%$] $|^# $"
 
 
 class StrongSwan(Shell):
@@ -606,7 +632,7 @@ class StrongSwan(Shell):
         return ping_ok(self.run(f"ping -c 5 -W 1 -I {src} {dst}", 60))
 
 
-DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "strongswan": StrongSwan}
+DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan}
 
 
 # --------------------------------------------------------------------------- checks
@@ -731,7 +757,8 @@ def main():
     subprocess.run(gen, check=True)
     with open(os.path.join(HERE, "out", "plan.json"), encoding="utf-8") as f:
         plan = json.load(f)
-    secrets = sorted({c["psk"] for n in plan["nodes"].values() for c in n.get("data", {}).get("connections", [])} |
+    secrets = sorted({c["psk"] for n in plan["nodes"].values() for key in ("connections", "tunnels")
+                      for c in n.get("data", {}).get(key, [])} |
                      set(re.findall(r"pre-shared-key (\w+)", json.dumps(plan))) |
                      set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))))
 

@@ -57,7 +57,7 @@ Got a tunnel running? Use **Report a working configuration** in the tool: it ope
 
 [`lab/`](lab/README.md) brings up real IKEv2 tunnels between two network namespaces with the configs the tool generates, and checks the negotiated algorithms, traffic, rekey and PFS. It covers the baseline profiles, the strongest common profile for every platform pair, a PAN-OS ↔ Azure emulation and negative controls. It runs on every push through GitHub Actions, or locally with `sudo node lab/run.js`. Vendor CLI syntax is not tested there.
 
-[`lab/gns3/`](lab/gns3/README.md) runs the generated configs on real appliances in GNS3 (Catalyst 8000v, ASAv, OPNsense and strongSwan, full mesh, strongest common profile per pair) and checks SAs, algorithms and traffic for every tunnel. It needs your own GNS3 server and images.
+[`lab/gns3/`](lab/gns3/README.md) runs the generated configs on real appliances in GNS3 (Catalyst 8000v, ASAv, OPNsense, pfSense and strongSwan, full mesh, strongest common profile per pair) and checks SAs, algorithms and traffic for every tunnel. It needs your own GNS3 server and images.
 
 ## Azure Bicep
 

@@ -772,6 +772,12 @@ def main():
     for nid in ids:
         n = plan["nodes"][nid]
         t = g.ensure_docker_template(n["template"], n["image"], compute) if nid == "strongswan" and not opt.dry_run else g.template(n["template"])
+        if not t and nid != "strongswan":
+            # the appliance wizard adds the version, e.g. "OPNsense" -> "OPNsense 26.1"
+            close = [x for x in g.templates() if not x.get("builtin") and x["name"].startswith(n["template"] + " ")]
+            if len(close) == 1:
+                t = close[0]
+                log(f"  {nid}: using template '{t['name']}' (set nodes.{nid}.template to it to silence this)")
         if not t:
             names = sorted(x["name"] for x in g.templates() if not x.get("builtin"))
             sys.exit(f"Template '{n['template']}' for {nid} not found on the GNS3 server. Import the appliance or fix "

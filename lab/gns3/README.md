@@ -3,15 +3,16 @@
 This lab takes the configs the tool generates and runs them on real virtual appliances in GNS3, in a full mesh:
 
 ```
-                              TM-WAN (switch, 203.0.113.0/24)
-     ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-  TM-IOSXE        TM-ASA       TM-OPNSENSE    TM-PFSENSE    TM-STRONGSWAN  TM-MIKROTIK
-  .11             .12           .13            .15           .14            .16
-  Lo1 10.1.0.1    inside        LAN            LAN           lo             bridge lan0
-                  10.2.0.1      10.3.0.1       10.5.0.1      10.4.0.1       10.6.0.1
+                                  TM-WAN (switch, 203.0.113.0/24)
+   IOS-XE .11   ASA .12   OPNsense .13   strongSwan .14   pfSense .15
+   MikroTik .16   vSRX .17   VyOS .18   OpenWrt .19
+
+   LANs: 10.1.0.0/24 (IOS-XE) … 10.9.0.0/24 (OpenWrt), one /24 per node, on a loopback,
+   dummy or empty-bridge interface, or on a small switch of its own (ASA, OPNsense,
+   pfSense, OpenWrt)
 ```
 
-Every pair of nodes gets a policy-based tunnel (15 tunnels with all six nodes). For each pair the plan uses the **strongest common profile**, the same one the tool's "Use strongest profile both sides support" button picks. Between most of these platforms that is the recommended baseline (with MikroTik, IKE uses AES-256-CBC, since RouterOS has no GCM in phase 1): AES-256-GCM, PRF SHA-384, group 20, ESP AES-256-GCM, PFS group 20. `--profile minimum` runs AES-256-CBC / SHA-256 / group 14 instead.
+Every pair of nodes gets a tunnel (36 with all nine nodes), policy-based wherever the platform has it; Junos is route-based with one traffic selector per peer. For each pair the plan uses the **strongest common profile**, the same one the tool's "Use strongest profile both sides support" button picks. Between most of these platforms that is the recommended baseline (with MikroTik and vSRX, IKE uses AES-256-CBC with SHA-384): AES-256-GCM, PRF SHA-384, group 20, ESP AES-256-GCM, PFS group 20. `--profile minimum` runs AES-256-CBC / SHA-256 / group 14 instead.
 
 For every tunnel it checks:
 
@@ -33,6 +34,7 @@ It also checks that every config line was accepted: IOS-XE `%` errors, ASA `ERRO
 | pfSense config mapping | The config `pfsense_apply.php` writes was run through pfSense 2.7.2's own proposal code (`ipsec.inc`): it gives `aes256gcm128-sha384-ecp384` / `aes256gcm128-ecp384` (recommended) and `aes256-sha256-modp2048` (minimum), and the strongSwan lab negotiates the expected algorithms from that spelling |
 | OPNsense and strongSwan drivers | **Run on real images** (2026-10-20): GNS3 2.2.61 on Proxmox, OPNsense 26.1 ↔ strongSwan container, recommended profile. Tunnel up with IKE AES_GCM_16_256 / PRF_HMAC_SHA2_384 / ECP_384 and ESP AES_GCM_16_256, traffic both ways ([report](reference/2026-10-20-opnsense-strongswan.md)). The first runs found and fixed: enc0 registration before the IPsec rule, explicit WAN rules for IKE/NAT-T/ESP, the docker auxiliary console, telnet option handling, and the strongSwan file name |
 | MikroTik driver | Login flow (license prompt, forced password change), error detection and parsers tested against a simulated RouterOS console; **not yet run on a real CHR**. AES-GCM in phase 2 is generated with `auth-algorithms=null`, which this run should confirm |
+| vSRX, VyOS and OpenWrt drivers | Login, configuration, error detection and parsers tested against simulated consoles (and, for OpenWrt, an ash shell behind GNS3's own telnet server); **not yet run on real images**. VyOS's and OpenWrt's proposal spelling is proven in the strongSwan lab |
 | IOS-XE, ASA and pfSense drivers | **Not yet run against real images.** Prompts, commands and output parsers follow Cisco and OPNsense documentation and the OPNsense source; the parsers are tested against sample output in that format, not output captured from a device |
 
 The first runs on real images will probably need small fixes in the drivers (a prompt or a show-command format). Please report what you find with the console logs in `lab/gns3/results/`.
@@ -48,7 +50,10 @@ The first runs on real images will probably need small fixes in the drivers (a p
   - **strongSwan**: build the image on the GNS3 host, `docker build -t tunnelmatch-strongswan lab/gns3/strongswan`. The lab creates the docker template itself if it is missing. ESP runs in the host kernel (XFRM).
   - **pfSense** (2.7.2): needs a one-time install first, see [pfSense](#pfsense-one-time-preparation) below.
   - **MikroTik CHR** (RouterOS 7, `chr-7.x.img` from mikrotik.com/download, free). Runs unlicensed at 1 Mbit/s per interface, plenty for the tests. The lab logs in as `admin` with an empty password on first boot and sets `password` from the config.
-- About 14.5 GB RAM for all six nodes (C8000v 4 GB, ASAv 2 GB, OPNsense 2 GB, pfSense 2 GB, CHR 384 MB, container minimal).
+  - **Juniper vSRX** (60-day evaluation licence from Juniper). The lab logs in as root without a password on first boot, sets `password` from the config and commits. Give it 4 GB RAM.
+  - **VyOS**: the free rolling-release ISO works as a live system (make a QEMU template that boots the ISO, console telnet), or a 1.4/1.5 qcow2 if you have a subscription. The 1.5 appliance template asks for 8 GB RAM; 2 GB is enough for the lab. Login `vyos`/`vyos`.
+  - **OpenWrt** (free): the image has no strongSwan, so prepare it once, see [OpenWrt](#openwrt-one-time-preparation).
+- About 21 GB RAM for all nine nodes (C8000v 4 GB, ASAv 2 GB, vSRX 4 GB, VyOS 2 GB, OPNsense 2 GB, pfSense 2 GB, CHR 384 MB, OpenWrt 128 MB, container minimal). Use `--nodes` to run a subset.
 
 ## pfSense: one-time preparation
 
@@ -66,11 +71,29 @@ The GNS3 pfSense appliance is the installer ISO with a VNC console, so the lab c
 5. Choose **6) Halt system**, wait until it is off, and stop the node in GNS3.
 6. On the GNS3 server machine:
    ```sh
-   python3 lab/gns3/prepare_pfsense.py --project pfsense-prep
+   python3 lab/gns3/prepare_template.py --project pfsense-prep --name "pfSense 2.7.2 (tmlab)"
    ```
    This copies the installed disk into the GNS3 images folder and creates the template **pfSense 2.7.2 (tmlab)** (no ISO, telnet console), the name `lab.example.json` already uses. You can delete the prep project afterwards.
 
 In the lab, pfSense is configured by `pfsense_apply.php` through the console shell: interface addresses, bogon/private blocks off on WAN, one phase 1 per peer and one phase 2 per subnet pair (the same `config.xml` entries the Tunnels pages write, from the tool's pfSense fields), and a pass rule on the IPsec tab. The GUI's form validation does not run there; the script checks every algorithm against pfSense's own lists instead.
+
+## OpenWrt: one-time preparation
+
+The OpenWrt image has no strongSwan. Install it once with internet access and turn the disk into a template:
+
+1. Import the **OpenWrt** appliance. In a GNS3 project named `openwrt-prep`, add one OpenWrt node and connect its **eth1 (WAN)** to a **NAT** node. Start it and open the console.
+2. Install strongSwan (OpenWrt 25.x uses `apk`, 24.x and older `opkg`):
+   ```sh
+   apk update && apk add strongswan-full          # 25.x
+   opkg update && opkg install strongswan-full    # 24.x
+   ```
+3. Run `poweroff`, wait, and stop the node.
+4. On the GNS3 server machine: `python3 lab/gns3/prepare_template.py --project openwrt-prep --name "OpenWrt (tmlab)"`
+
+## Not automated
+
+- **Sophos Firewall** and **IPFire** are in the tool, but not in the lab. Both are set up through their web interface (Sophos also needs an online registration, and the GNS3 IPFire appliance is from 2019), so test them by hand with the tool's field values and report the result with **Report a working configuration**.
+- **Left out on purpose:** IPCop, Smoothwall Express, ZeroShell and ClearOS (no longer maintained, IKEv1-era stacks), Untangle (IPsec is a paid add-on), and router images without an IKE daemon (FRR, VPP, Infix). OpenWrt-based NethSecurity would test the same strongSwan setup as OpenWrt.
 
 ## Run it
 
@@ -119,6 +142,9 @@ All configs come from the tool's own generators (the same code the page runs, lo
 - **pfSense**: the tool's Tunnels field values (for example "AES256-GCM, key length 128 bits") are mapped to `config.xml` values (`aes256gcm`, keylen 128) by `generate.js` and written by `pfsense_apply.php`, followed by `/etc/rc.reload_all`.
 - **OPNsense**: the tool's Connections field values are read back into the MVC models (`OPNsense\IPsec\Swanctl` and `OPNsense\IPsec\IPsec`) by `opnsense_apply.php`, which runs on the firewall through the console shell. The models validate every value, so a proposal string the GUI would not offer fails the run. It also sets the interface addresses, turns off the bogon/private blocks on WAN (203.0.113.0/24 is a documentation range), enables IPsec and adds a pass rule on the IPsec interface.
 - **MikroTik**: the tool's RouterOS script per peer, flattened to one full-path command per line (`/ip ipsec profile add …`), after the WAN address, an empty bridge `lan0` for the LAN address and static routes. Login is `admin+ct200w` (no colours, no terminal detection, wide lines). RouterOS shows no IKE algorithms in `active-peers`, so for MikroTik the lab checks the IKE state, the ESP algorithm from `installed-sa`, and the IKE algorithms from the peer's side.
+- **vSRX**: the tool's `set` commands (route-based on one `st0` unit per peer, traffic selectors, zones `untrust`/`trust`/`vpn`), after the WAN address on `ge-0/0/0`, the LAN on `lo0.0` and host-inbound IKE and ping. No static routes: auto route insertion adds them.
+- **VyOS**: the tool's `set vpn ipsec …` commands per peer (shared lines once), after the WAN address, a dummy interface `dum0` for the LAN and static routes; `commit`, SAs read with `swanctl`.
+- **OpenWrt**: network and routes via UCI, then the tool's UCI commands (`/etc/config/ipsec`, firewall rules and NAT exemption), firewall and swanctl restarted.
 - **strongSwan**: the tool's `swanctl.conf` per peer in `/etc/swanctl/conf.d/`, LAN address on `lo`, `charon-systemd` and `swanctl --load-all`.
 
 ## Self-test without GNS3

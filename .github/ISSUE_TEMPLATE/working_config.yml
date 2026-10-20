@@ -25,6 +25,10 @@ body:
         - strongSwan (swanctl)
         - OPNsense / pfSense
         - MikroTik RouterOS 7
+        - VyOS
+        - OpenWrt (strongSwan)
+        - Sophos Firewall (SFOS)
+        - IPFire
     validations:
       required: true
 
@@ -68,6 +72,10 @@ body:
         - strongSwan (swanctl)
         - OPNsense / pfSense
         - MikroTik RouterOS 7
+        - VyOS
+        - OpenWrt (strongSwan)
+        - Sophos Firewall (SFOS)
+        - IPFire
     validations:
       required: true
 

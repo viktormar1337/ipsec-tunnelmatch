@@ -259,7 +259,9 @@ function mergePfsense(node, tunnels) {
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
-    const name = (t.text.match(/^# \/etc\/swanctl\/conf\.d\/(\S+)/m) || [, `${t.peer.toLowerCase()}.conf`])[1];
+    // the tool's first line is "# /etc/swanctl/conf.d/<name>.conf, side A"
+    const name = (t.text.match(/^# \/etc\/swanctl\/conf\.d\/([\w.-]+\.conf)\b/m) || [, `${t.peer.toLowerCase()}.conf`])[1];
+    if (!/^[\w.-]+\.conf$/.test(name)) throw new Error(`strongSwan file name "${name}" for ${t.peer} does not end in .conf`);
     files[`/etc/swanctl/conf.d/${name}`] = t.text.replace(/<PSK>/g, t.psk) + "\n";
   });
   const shell = [

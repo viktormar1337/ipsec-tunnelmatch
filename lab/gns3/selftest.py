@@ -194,11 +194,19 @@ console.log(JSON.stringify(out));
     return json.loads(r.stdout)
 
 
+def file_name(conf):
+    """The file name generate.js gives a tool config (same regex), so the self-test covers it."""
+    js = "const t=require('fs').readFileSync(0,'utf8');const m=t.match(/^# \\/etc\\/swanctl\\/conf\\.d\\/([\\w.-]+\\.conf)\\b/m);process.stdout.write(m?m[1]:'')"
+    name = subprocess.run(["node", "-e", js], input=conf, capture_output=True, text=True, check=True).stdout
+    check(name.endswith(".conf") and "," not in name, f"strongSwan config file name: {name!r}")
+    return name
+
+
 def node_plan(me, peer, text, psk):
     lan = {"left": "10.21.0", "right": "10.22.0"}
     wan = {"left": "203.0.113.21", "right": "203.0.113.22"}
     conf = text.replace("<PSK>", psk)
-    name = conf.split("\n")[0].split("conf.d/")[1].split(",")[0]
+    name = file_name(conf)
     return {
         "files": {f"/etc/swanctl/conf.d/{name}": conf + "\n"},
         "shell": [

@@ -51,8 +51,14 @@ connections {
     proposals = ${ikeProposal(S)}
     rekey_time = ${S.p1life}s
     dpd_delay = ${S.dpdInt}s
-    local { auth = psk  id = ${c.me.ip} }
-    remote { auth = psk  id = ${c.peer.ip} }
+    local {
+      auth = psk
+      id = ${c.me.ip}
+    }
+    remote {
+      auth = psk
+      id = ${c.peer.ip}
+    }
     children {
 ${children}
     }

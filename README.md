@@ -1,5 +1,7 @@
 # IPsec Tunnelmatch
 
+[![Lab](https://github.com/viktormar1337/ipsec-tunnelmatch/actions/workflows/lab.yml/badge.svg)](https://github.com/viktormar1337/ipsec-tunnelmatch/actions/workflows/lab.yml)
+
 A single-page tool for matching IPsec site-to-site settings between two different vendors.
 
 Describe both endpoints and one shared crypto profile. The tool:
@@ -51,6 +53,10 @@ The **Go-live checklist** covers the things the tool cannot check (key quality, 
 
 Got a tunnel running? Use **Report a working configuration** in the tool: it opens the [Working configuration](https://github.com/viktormar1337/ipsec-tunnelmatch/issues/new?template=working_config.yml) form with platforms and settings filled in, and you add the OS/firmware versions. Confirmed combinations are collected in [#1 Verified working configurations](https://github.com/viktormar1337/ipsec-tunnelmatch/issues/1).
 
+## Lab
+
+[`lab/`](lab/README.md) brings up real IKEv2 tunnels between two network namespaces with the configs the tool generates, and checks the negotiated algorithms, traffic, rekey and PFS. It covers the baseline profiles, the strongest common profile for every platform pair, a PAN-OS ↔ Azure emulation and negative controls. It runs on every push through GitHub Actions, or locally with `sudo node lab/run.js`. Vendor CLI syntax is not tested there; see the lab README.
+
 ## Azure Bicep
 
 The Azure output imports `ipsecPolicyType` and `trafficSelectorPolicyType` from a types file you provide (default `./types.bicep`). The page shows the exports that file needs. The shared key is read with `readEnvironmentVariable('VPN_PSK')` at deploy time.
@@ -70,6 +76,7 @@ js/analyze.js           generic checks and route-based / policy-based reconcilia
 js/baseline.js          recommended baseline, strongest common profile, go-live checklist
 js/pdf.js               PDF parameter sheet
 js/app.js               form state, rendering and wiring
+lab/                    real-tunnel tests (strongSwan in network namespaces)
 ```
 
 Scripts are plain (not ES modules) so the page works from `file://`. They share one global, `TM`, and must load in the order listed in `index.html`: core, vendors, analyze, baseline, pdf, app.

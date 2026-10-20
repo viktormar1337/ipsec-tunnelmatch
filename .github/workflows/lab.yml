@@ -1,0 +1,43 @@
+name: Lab
+
+# Brings real IKEv2 tunnels up between two network namespaces with the configs
+# the tool generates, and checks what was negotiated. See lab/README.md.
+on:
+  push:
+    branches: [main]
+    paths: ["js/**", "lab/**", "index.html", ".github/workflows/lab.yml"]
+  pull_request:
+    paths: ["js/**", "lab/**", "index.html", ".github/workflows/lab.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install strongSwan
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            strongswan-swanctl charon-systemd libcharon-extra-plugins libstrongswan-extra-plugins iproute2 iputils-ping
+          # The packaged service is not needed; the lab starts its own daemons.
+          sudo systemctl stop strongswan || true
+
+      - name: Run lab
+        run: sudo -E node lab/run.js
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-results
+          path: lab/results/

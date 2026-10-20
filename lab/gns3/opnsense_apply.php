@@ -65,10 +65,31 @@ if ($mode === 'filter') {
         'destination_net' => 'any',
         'description' => 'tmlab: allow IPsec traffic',
     ]);
+    /* IKE, NAT-T and ESP from the peers on WAN. The first run on OPNsense 26.1 dropped IKE
+       on WAN without these (the tunnel came up once the firewall was off). */
+    $peers = implode(',', array_unique(array_map(fn($c) => $c['remote_addrs'], $in['connections'])));
+    foreach ([['UDP', '500', 'IKE'], ['UDP', '4500', 'NAT-T'], ['ESP', '', 'ESP']] as [$proto, $port, $what]) {
+        $rule = [
+            'enabled' => '1',
+            'action' => 'pass',
+            'quick' => '1',
+            'interface' => 'wan',
+            'direction' => 'in',
+            'ipprotocol' => 'inet',
+            'protocol' => $proto,
+            'source_net' => $peers,
+            'destination_net' => 'any',
+            'description' => "tmlab: {$what} from the IPsec peers",
+        ];
+        if ($port !== '') {
+            $rule['destination_port'] = $port;
+        }
+        $filter->rules->rule->Add()->setNodes($rule);
+    }
     tmlab_validate(['filter' => $filter]);
     $filter->serializeToConfig();
     Config::getInstance()->save();
-    echo "TMLAB-OK filter rule on enc0\n";
+    echo "TMLAB-OK filter rules on enc0 and WAN\n";
     exit(0);
 }
 

@@ -138,6 +138,8 @@ ${c.remote.map((r) => `     ${r.text.padEnd(20)} via IPSEC${reqid}_GW`).join("\n
 
     const firewall = `
 ${step()}. Firewall .................. Firewall > Rules > IPsec: allow the tunnel traffic.
+                                Firewall > Rules > WAN: allow UDP 500, UDP 4500 and ESP from ${c.peer.ip}
+                                if no automatic IPsec rules are listed there (OPNsense 26.1 in our lab had none).
 
 DPD retries are not a per-connection field; strongSwan's global retransmission settings apply.
 Check status under VPN > IPsec > Status Overview.`;

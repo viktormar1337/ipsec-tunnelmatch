@@ -69,6 +69,21 @@ const FIXED = [
     expect: "pass",
   },
   {
+    name: "VyOS proposal spelling, recommended (aes256gcm128-sha384-prfsha384-ecp384 / aes256gcm128-sha256-ecp384)",
+    state: profile(RECOMMENDED),
+    // VyOS always writes encryption-hash[-prf][-dh], so GCM ESP proposals carry a hash
+    emulate: { A: { vendor: "vyos" } },
+    vendors: { A: "vyos", B: "strongswan" },
+    expect: "pass",
+  },
+  {
+    name: "VyOS proposal spelling, minimum (aes256-sha256-prfsha256-modp2048)",
+    state: profile(MINIMUM),
+    emulate: { A: { vendor: "vyos" } },
+    vendors: { A: "vyos", B: "strongswan" },
+    expect: "pass",
+  },
+  {
     name: "PAN-OS ↔ Azure, IKE GCM with group 20: PAN-OS uses PRF SHA-384, Azure SHA-384",
     state: profile(RECOMMENDED),
     // PAN-OS sends no integrity with IKE GCM and derives the PRF from the DH group.

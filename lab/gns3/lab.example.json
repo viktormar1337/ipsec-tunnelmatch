@@ -128,6 +128,22 @@
       "password": "TMlab-Root-1",
       "extra_config": [],
       "boot_timeout": 1500
+    },
+    "vyos": {
+      "enabled": true,
+      "template": "VyOS",
+      "wan_port": {
+        "adapter": 0,
+        "port": 0
+      },
+      "wan_if": "eth0",
+      "wan_ip": "203.0.113.18",
+      "lan": "10.8.0.0/24",
+      "lan_ip": "10.8.0.1",
+      "user": "vyos",
+      "password": "vyos",
+      "extra_config": [],
+      "boot_timeout": 900
     }
   }
 }

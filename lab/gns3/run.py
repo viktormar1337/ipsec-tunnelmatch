@@ -31,8 +31,8 @@ from urllib.parse import urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 
-NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX"}
-LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0)}
+NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX", "vyos": "TM-VYOS"}
+LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0), "vyos": (500, 0)}
 
 
 def log(msg):
@@ -860,7 +860,46 @@ class Vsrx(Driver):
         return parse_junos(ike, ipsec, peer)
 
 
-DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx}
+class Vyos(Driver):
+    """VyOS over the serial console: login, configure, set lines, commit. Reads SAs with swanctl."""
+
+    prompt = r"^[\w.-]+@[\w.-]+(?::[^\n]*\$|#) ?$"
+
+    def login(self, timeout):
+        answers = [(r"login: ?$", self.node.get("user", "vyos")), (r"^Password: ?$", self.node.get("password", "vyos"))]
+        end = time.time() + timeout
+        self.con.sendline()
+        while time.time() < end:
+            try:
+                i, _, _ = self.con.expect([a[0] for a in answers] + [self.prompt], 30)
+            except TimeoutError:
+                self.con.sendline()
+                continue
+            if i == len(answers):
+                self.con.drain(1)
+                return
+            self.con.sendline(answers[i][1])
+        raise TimeoutError("VyOS did not reach the prompt")
+
+    def _check(self, line, out):
+        for err in re.findall(r"(?mi)^.*(?:invalid|is not valid|set failed|commit failed|error|failed).*$", out):
+            self.errors.append(f"{line} → {err.strip()}")
+
+    def apply(self):
+        self.run("configure", 60)
+        for line in self.node["lines"]:
+            self._check(line, self.run(line, 60))
+        self._check("commit", self.run("commit", 600))
+        self.run("exit discard", 60)  # leave configuration mode (the commit is done; no save needed for the lab)
+
+    def ping(self, src, dst):
+        return ping_ok(self.run(f"/bin/ping -c 5 -W 1 -I {src} {dst}", 60))
+
+    def sas(self, peer):
+        return parse_swanctl_raw(self.run("sudo swanctl --list-sas --raw", 60), peer)
+
+
+DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx, "vyos": Vyos}
 
 
 # --------------------------------------------------------------------------- checks
@@ -1018,7 +1057,8 @@ def main():
                      set(re.findall(r"pre-shared-key (\w+)", json.dumps(plan))) |
                      set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))) |
-                     set(re.findall(r'ascii-text \\"(\w+)\\"', json.dumps(plan))))
+                     set(re.findall(r'ascii-text \\"(\w+)\\"', json.dumps(plan))) |
+                     set(re.findall(r"secret '(\w+)'", json.dumps(plan))))
 
     srv = plan["server"]
     g = Gns3(srv["url"], srv.get("user"), srv.get("password"))

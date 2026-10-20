@@ -35,6 +35,7 @@ const KINDS = {
   strongswan: { vendor: "strongswan", name: "STRONGSWAN" },
   mikrotik: { vendor: "mikrotik", name: "MIKROTIK" },
   vsrx: { vendor: "juniper", name: "VSRX" },
+  vyos: { vendor: "vyos", name: "VYOS" },
 };
 
 /* What the devices report, normalised the same way run.py normalises their output. */
@@ -64,7 +65,7 @@ function stateFor(cfg, a, b, crypto_) {
       nets: n.lan,
       // policy-based wherever the platform has it; Junos is route-based only (st0 + traffic selectors)
       mode: v.modes.includes("policy") ? "policy" : v.modes[0],
-    }, id === "asa" ? { iface: "outside" } : {}, id === "iosxe" ? { iface: n.wan_if } : {},
+    }, id === "asa" ? { iface: "outside" } : {}, id === "iosxe" || id === "vyos" ? { iface: n.wan_if } : {},
     // one st0 unit per peer on Junos
     id === "vsrx" ? { iface: `${n.wan_if}.0`, tun: `st0.${order.indexOf(other) + 1}` } : {});
   };
@@ -313,6 +314,25 @@ function mergeVsrx(node, tunnels) {
   return { lines };
 }
 
+/* VyOS: set commands from the tool (trailing "# ..." notes removed) after the lab's interfaces;
+   the LAN address sits on a dummy interface. */
+function mergeVyos(node, tunnels) {
+  const lanPrefix = node.lan.split("/")[1];
+  const strip = (l) => l.replace(/\s+#.*$/, "").trim();
+  const lines = [
+    "set system host-name TM-VYOS",
+    `set interfaces ethernet ${node.wan_if} address '${node.wan_ip}/${node.prefix}'`,
+    `set interfaces dummy dum0 address '${node.lan_ip}/${lanPrefix}'`,
+    ...node.routes.map((r) => `set protocols static route ${r.cidr} next-hop ${r.via}`),
+    ...(node.extra_config || []),
+  ];
+  const seen = new Set(lines);
+  tunnels.forEach((t) => t.text.replace(/<PSK>/g, t.psk).split("\n").map(strip)
+    .filter((l) => l && !l.startsWith("#"))
+    .forEach((l) => { if (!seen.has(l)) { seen.add(l); lines.push(l); } }));
+  return { lines };
+}
+
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
@@ -385,7 +405,7 @@ function main() {
     });
   }
 
-  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx };
+  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx, vyos: mergeVyos };
   const planNodes = {};
   ids.forEach((id) => {
     const n = nodes[id];

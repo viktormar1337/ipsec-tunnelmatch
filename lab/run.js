@@ -66,6 +66,12 @@ function preflight() {
     problems.push("strongSwan's openssl plugin is missing (apt install libstrongswan-standard-plugins); it provides AES-GCM and the ECP groups");
   if (!OPT.kernel && !libipsec) problems.push("kernel-libipsec plugin is missing (apt install libcharon-extra-plugins), or use --kernel");
   if (!OPT.kernel && !fs.existsSync("/dev/net/tun")) problems.push("/dev/net/tun is missing (needed for userspace ESP), or use --kernel");
+  try {
+    const aa = fs.readFileSync("/sys/kernel/security/apparmor/profiles", "utf8");
+    if (/swanctl|charon/.test(aa) && /\(enforce\)/.test(aa.split("\n").filter((l) => /swanctl|charon/.test(l)).join("\n")))
+      console.warn("Note: AppArmor profiles for strongSwan are enforced. They can block the lab's temporary configs and sockets;\n" +
+        "      unload them with: sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.swanctl /etc/apparmor.d/usr.sbin.charon-systemd");
+  } catch (e) { /* no AppArmor */ }
   if (problems.length) {
     console.error("Lab prerequisites not met:\n  - " + problems.join("\n  - "));
     process.exit(2);
@@ -313,7 +319,11 @@ async function runScenario(bins, sc) {
   try {
     lab.network(sc.state);
     await lab.start(configs);
-    SIDES.forEach((k) => check(/successfully loaded 1 connections/.test(lab.loaded[k]), `Side ${k} config loads in swanctl`));
+    SIDES.forEach((k) => {
+      const ok = /successfully loaded 1 connections/.test(lab.loaded[k]);
+      const why = ok ? "" : ": " + (lab.loaded[k].split("\n").find((l) => /fail|error|denied|invalid|connecting/i.test(l)) || lab.loaded[k].trim().split("\n")[0] || "no output");
+      check(ok, `Side ${k} config loads in swanctl${why}`);
+    });
 
     const ike = await lab.waitFor(children, sc.expect === "pass" ? 20 : 8);
     if (sc.expect === "fail") {

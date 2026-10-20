@@ -36,6 +36,8 @@ sudo node lab/run.js --keep     # leave namespaces and logs in place for inspect
 sudo node lab/run.js --kernel   # use the kernel's IPsec (XFRM) instead of userspace ESP
 ```
 
+On Ubuntu, AppArmor confines `swanctl` and `charon-systemd` to their standard paths, which blocks the lab's temporary configs and sockets. Unload the profiles first: `sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.swanctl /etc/apparmor.d/usr.sbin.charon-systemd` (they come back on reboot or with `apparmor_parser -r`). The lab warns when it sees them.
+
 ESP runs in userspace (strongSwan's `kernel-libipsec`) by default, so results don't depend on which crypto modules the host kernel has. The report is written to `lab/results/latest.md` and `latest.json`.
 
 The lab only touches the two namespaces it creates (`tml<pid>a` and `tml<pid>b`) and the daemons it starts; it does not stop or change a strongSwan already running on the host.

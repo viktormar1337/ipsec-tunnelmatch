@@ -113,6 +113,21 @@
       "password": "TMlab-Admin-1",
       "extra_config": [],
       "boot_timeout": 600
+    },
+    "vsrx": {
+      "enabled": true,
+      "template": "vSRX",
+      "wan_port": {
+        "adapter": 1,
+        "port": 0
+      },
+      "wan_if": "ge-0/0/0",
+      "wan_ip": "203.0.113.17",
+      "lan": "10.7.0.0/24",
+      "lan_ip": "10.7.0.1",
+      "password": "TMlab-Root-1",
+      "extra_config": [],
+      "boot_timeout": 1500
     }
   }
 }

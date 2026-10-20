@@ -123,6 +123,27 @@ ROS_SAS = """Flags: S - SEEN-TRAFFIC; H - HW-AEAD; E - IKE
 """
 
 
+# Junos detail output in the layout of Juniper's documentation; not captured from a device.
+JUNOS_IKE = """IKE peer 203.0.113.14, Index 5, Gateway Name: GW-STRONGSWAN
+  Role: Initiator, State: UP
+  Exchange type: IKEv2, Authentication method: Pre-shared-keys
+  Local: 203.0.113.17:500, Remote: 203.0.113.14:500
+  Algorithms:
+   Authentication        : hmac-sha384-192
+   Encryption            : aes256-cbc
+   Pseudo random function: hmac-sha384
+   Diffie-Hellman group  : DH-group-20
+"""
+
+JUNOS_IPSEC = """  ID: 500001 Virtual-system: root, VPN Name: VPN-STRONGSWAN
+  Local Gateway: 203.0.113.17, Remote Gateway: 203.0.113.14
+  Local Identity: ipv4(10.7.0.0-10.7.0.255)
+    Direction: inbound, SPI: 0x8a1b2c3d, AUX-SPI: 0
+    Protocol: ESP, Authentication: none, Encryption: aes-gcm (256 bits)
+    PFS (group): DH-group-20
+"""
+
+
 def test_parsers():
     r = run.parse_cisco_ikev2(IOSXE_IKEV2, "203.0.113.12")
     check(r and r["ike"] == {"state": "READY", "encr": "AES-GCM-256", "prf": "SHA384", "integ": None, "dh": 20},
@@ -138,6 +159,10 @@ def test_parsers():
           f"ASA ikev2 sa detail: {r}")
     r = run.parse_cisco_ipsec(ASA_IPSEC)
     check(r == {"encaps": 5, "decaps": 5}, f"ASA ipsec sa: {r}")
+    r = run.parse_junos(JUNOS_IKE, JUNOS_IPSEC, "203.0.113.14")
+    check(r and r["ike"] == {"state": "ESTABLISHED", "encr": "AES-CBC-256", "prf": "SHA384", "integ": "SHA384", "dh": 20}
+          and r["esp"] == {"encr": "AES-GCM-256", "integ": None, "pfs": 20}, f"Junos ike/ipsec security-associations: {r}")
+    check(run.parse_junos(JUNOS_IKE, JUNOS_IPSEC, "203.0.113.99") is None, "Junos: unknown peer gives None")
     r = run.parse_routeros_sas(ROS_PEERS, ROS_SAS, "203.0.113.16", "203.0.113.14")
     check(r == {"ike": {"state": "ESTABLISHED"}, "esp": {"encr": "AES-GCM-256", "integ": None},
                 "counters": {"encaps": 760, "decaps": 840}}, f"RouterOS active-peers / installed-sa: {r}")

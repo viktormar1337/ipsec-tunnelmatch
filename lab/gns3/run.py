@@ -31,8 +31,8 @@ from urllib.parse import urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 
-NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK"}
-LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250)}
+NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX"}
+LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0)}
 
 
 def log(msg):
@@ -420,6 +420,51 @@ def parse_routeros_sas(peers_text, sa_text, me, peer):
     return {"ike": ike, "esp": esp, "counters": counters}
 
 
+JUNOS_ENC = {"aes256-cbc": "AES-CBC-256", "aes-256-cbc": "AES-CBC-256", "aes128-cbc": "AES-CBC-128", "aes-128-cbc": "AES-CBC-128",
+             "aes256-gcm": "AES-GCM-256", "aes-256-gcm": "AES-GCM-256", "aes128-gcm": "AES-GCM-128", "aes-128-gcm": "AES-GCM-128",
+             "aes-gcm-256": "AES-GCM-256", "aes-gcm-128": "AES-GCM-128", "aes-cbc-256": "AES-CBC-256", "aes-cbc-128": "AES-CBC-128"}
+
+
+def parse_junos(ike_text, ipsec_text, peer):
+    """`show security ike security-associations detail` and `show security ipsec security-associations detail`."""
+    blocks = re.split(r"(?m)^\s*IKE peer ", ike_text)
+    blk = next((b for b in blocks if b.startswith(peer + ",") or b.startswith(peer + " ")), None)
+    if not blk:
+        return None
+    get = lambda pat, t: (re.search(pat, t, re.I) or [None, None])[1]
+    ike = {"state": (get(r"State\s*:\s*(\w+)", blk) or "").upper()}
+    enc = get(r"Encryption\s*:\s*([\w-]+)", blk)
+    if enc:
+        ike["encr"] = JUNOS_ENC.get(enc.lower(), enc)
+    prf = get(r"Pseudo random function\s*:\s*hmac-sha(\d+)", blk)
+    if prf:
+        ike["prf"] = "SHA" + prf
+    integ = get(r"Authentication\s*:\s*hmac-sha(\d+)", blk)
+    if integ:
+        ike["integ"] = "SHA" + integ
+    elif enc and "gcm" in enc.lower():
+        ike["integ"] = None
+    dh = get(r"Diffie-Hellman group\s*:\s*DH-group-(\d+)", blk)
+    if dh:
+        ike["dh"] = int(dh)
+    if ike["state"] == "UP":
+        ike["state"] = "ESTABLISHED"
+    esp = {}
+    for sa in re.split(r"(?m)^\s*ID:\s", ipsec_text):
+        if peer not in sa:
+            continue
+        m = re.search(r"Encryption:\s*aes-(gcm|cbc)\s*\((\d+) bits\)", sa, re.I)  # "aes-gcm (256 bits)"
+        enc = f"aes-{m.group(1)}-{m.group(2)}" if m else get(r"(aes-?(?:gcm|cbc)-?\d+|aes\d+-(?:gcm|cbc))", sa)
+        if enc:
+            esp["encr"] = JUNOS_ENC.get(enc.lower(), enc)
+            esp["integ"] = None if "gcm" in enc.lower() else _cisco_hash(get(r"hmac-(sha\d+|sha1)", sa))
+        pfs = get(r"PFS \(?group\)?\s*:?\s*(?:DH-group-|group)?(\d+)", sa)
+        if pfs:
+            esp["pfs"] = int(pfs)
+        break
+    return {"ike": ike, "esp": esp, "counters": {}}
+
+
 def ping_ok(text):
     """Received count from Cisco, FreeBSD or Linux ping output."""
     m = re.search(r"Success rate is (\d+) percent \((\d+)/(\d+)\)", text)
@@ -756,7 +801,66 @@ class MikroTik(Driver):
         return parse_routeros_sas(peers, sas, me, peer)
 
 
-DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik}
+class Vsrx(Driver):
+    """Junos (vSRX) over the serial console: root login, cli, configure, set lines, commit."""
+
+    prompt = r"^[\w@.-]*[>#] ?$"
+
+    def login(self, timeout):
+        pw = self.node.get("password", "")
+        tries = ["", pw]  # factory default: root without a password
+        answers = [
+            (r"login: ?$", "root"),
+            (r"^Password: ?$", None),
+            (r"^root@[^\s]*:~ ?[#%] ?$", "cli"),   # FreeBSD shell after login
+        ]
+        end = time.time() + timeout
+        self.con.sendline()
+        while time.time() < end:
+            try:
+                i, _, _ = self.con.expect([a[0] for a in answers] + [self.prompt], 30)
+            except TimeoutError:
+                self.con.sendline()
+                continue
+            if i == len(answers):
+                self.run("set cli screen-length 0")
+                self.run("set cli screen-width 0")
+                return
+            if i == 1:
+                self.con.sendline(tries.pop(0) if tries else pw)
+            else:
+                self.con.sendline(answers[i][1])
+        raise TimeoutError("Junos did not reach the CLI")
+
+    def _check(self, line, out):
+        for err in re.findall(r"(?mi)^\s*(?:error|syntax error|unknown command|missing argument|invalid).*$", out):
+            self.errors.append(f"{line} → {err.strip()}")
+
+    def apply(self):
+        self.run("configure", 60)
+        for line in self.node["lines"]:
+            self._check(line, self.run(line, 60))
+        # a commit needs a root password
+        self.con.sendline("set system root-authentication plain-text-password")
+        for _ in range(2):
+            self.con.expect([r"(?:New|Retype new) password: ?$"], 30)
+            self.con.sendline(self.node.get("password", "TMlab-Root-1"))
+        self.con.expect([self.prompt], 30)
+        out = self.run("commit and-quit", 600)
+        self._check("commit", out)
+        if "commit complete" not in out:
+            self.errors.append("commit did not complete: " + out.strip()[-300:])
+
+    def ping(self, src, dst):
+        return ping_ok(self.run(f"ping {dst} source {src} count 5 rapid", 60))
+
+    def sas(self, peer):
+        ike = self.run("show security ike security-associations detail", 60)
+        ipsec = self.run("show security ipsec security-associations detail", 60)
+        return parse_junos(ike, ipsec, peer)
+
+
+DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx}
 
 
 # --------------------------------------------------------------------------- checks
@@ -913,7 +1017,8 @@ def main():
                       for c in n.get("data", {}).get(key, [])} |
                      set(re.findall(r"pre-shared-key (\w+)", json.dumps(plan))) |
                      set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))) |
-                     set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))))
+                     set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))) |
+                     set(re.findall(r'ascii-text \\"(\w+)\\"', json.dumps(plan))))
 
     srv = plan["server"]
     g = Gns3(srv["url"], srv.get("user"), srv.get("password"))

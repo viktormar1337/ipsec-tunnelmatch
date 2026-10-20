@@ -34,6 +34,7 @@ const KINDS = {
   pfsense: { vendor: "opnsense", name: "PFSENSE" }, // the tool's OPNsense/pfSense platform, pfSense block
   strongswan: { vendor: "strongswan", name: "STRONGSWAN" },
   mikrotik: { vendor: "mikrotik", name: "MIKROTIK" },
+  vsrx: { vendor: "juniper", name: "VSRX" },
 };
 
 /* What the devices report, normalised the same way run.py normalises their output. */
@@ -52,7 +53,8 @@ function args() {
 
 /* A tool state for one tunnel between two lab nodes. */
 function stateFor(cfg, a, b, crypto_) {
-  const side = (id) => {
+  const order = Object.keys(KINDS);
+  const side = (id, other) => {
     const n = cfg.nodes[id];
     const v = TM.vendor(KINDS[id].vendor);
     return Object.assign({}, v.defaults, {
@@ -60,12 +62,15 @@ function stateFor(cfg, a, b, crypto_) {
       vendor: KINDS[id].vendor,
       ip: n.wan_ip,
       nets: n.lan,
-      mode: "policy",
-    }, id === "asa" ? { iface: "outside" } : {}, id === "iosxe" ? { iface: n.wan_if } : {});
+      // policy-based wherever the platform has it; Junos is route-based only (st0 + traffic selectors)
+      mode: v.modes.includes("policy") ? "policy" : v.modes[0],
+    }, id === "asa" ? { iface: "outside" } : {}, id === "iosxe" ? { iface: n.wan_if } : {},
+    // one st0 unit per peer on Junos
+    id === "vsrx" ? { iface: `${n.wan_if}.0`, tun: `st0.${order.indexOf(other) + 1}` } : {});
   };
   const s = JSON.parse(JSON.stringify(Object.assign({}, BASE, { tunnelName: `${KINDS[a].name}-${KINDS[b].name}` }, crypto_ || {})));
-  s.A = side(a);
-  s.B = side(b);
+  s.A = side(a, b);
+  s.B = side(b, a);
   return s;
 }
 
@@ -287,6 +292,27 @@ function mergeMikrotik(node, tunnels) {
   return { lines };
 }
 
+/* Junos: set commands from the tool, plus the lab's interfaces and zones. The tool output is
+   route-based with one traffic selector per subnet pair; auto route insertion adds the routes,
+   so no static routes here. */
+function mergeVsrx(node, tunnels) {
+  const lanPrefix = node.lan.split("/")[1];
+  const wan = `${node.wan_if}.0`;
+  const lines = [
+    "set system host-name TM-VSRX",
+    `delete interfaces ${node.wan_if}`,
+    `set interfaces ${node.wan_if} unit 0 family inet address ${node.wan_ip}/${node.prefix}`,
+    `set interfaces lo0 unit 0 family inet address ${node.lan_ip}/${lanPrefix}`,
+    `set security zones security-zone untrust interfaces ${wan} host-inbound-traffic system-services ike`,
+    `set security zones security-zone untrust interfaces ${wan} host-inbound-traffic system-services ping`,
+    "set security zones security-zone trust interfaces lo0.0 host-inbound-traffic system-services ping",
+    "set security zones security-zone vpn host-inbound-traffic system-services ping",
+    ...(node.extra_config || []),
+    ...tunnels.flatMap((t) => t.text.replace(/<PSK>/g, t.psk).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))),
+  ];
+  return { lines };
+}
+
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
@@ -359,7 +385,7 @@ function main() {
     });
   }
 
-  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik };
+  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx };
   const planNodes = {};
   ids.forEach((id) => {
     const n = nodes[id];

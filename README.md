@@ -25,7 +25,7 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 | Cisco ASA | CLI (VTI or crypto map) | Syntax reference |
 | Juniper SRX (Junos) | `set` commands (st0, traffic selectors) | Verified |
 | strongSwan | `swanctl.conf` | Syntax reference |
-| OPNsense / pfSense | Connections fields / Tunnels fields | Syntax reference |
+| OPNsense / pfSense | Connections fields / Tunnels fields | Syntax reference (OPNsense proposal list checked against its source) |
 
 "Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper 2026-10-20). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
 
@@ -55,7 +55,9 @@ Got a tunnel running? Use **Report a working configuration** in the tool: it ope
 
 ## Lab
 
-[`lab/`](lab/README.md) brings up real IKEv2 tunnels between two network namespaces with the configs the tool generates, and checks the negotiated algorithms, traffic, rekey and PFS. It covers the baseline profiles, the strongest common profile for every platform pair, a PAN-OS ↔ Azure emulation and negative controls. It runs on every push through GitHub Actions, or locally with `sudo node lab/run.js`. Vendor CLI syntax is not tested there; see the lab README.
+[`lab/`](lab/README.md) brings up real IKEv2 tunnels between two network namespaces with the configs the tool generates, and checks the negotiated algorithms, traffic, rekey and PFS. It covers the baseline profiles, the strongest common profile for every platform pair, a PAN-OS ↔ Azure emulation and negative controls. It runs on every push through GitHub Actions, or locally with `sudo node lab/run.js`. Vendor CLI syntax is not tested there.
+
+[`lab/gns3/`](lab/gns3/README.md) runs the generated configs on real appliances in GNS3 (Catalyst 8000v, ASAv, OPNsense and strongSwan, full mesh, strongest common profile per pair) and checks SAs, algorithms and traffic for every tunnel. It needs your own GNS3 server and images.
 
 ## Azure Bicep
 
@@ -77,6 +79,7 @@ js/baseline.js          recommended baseline, strongest common profile, go-live 
 js/pdf.js               PDF parameter sheet
 js/app.js               form state, rendering and wiring
 lab/                    real-tunnel tests (strongSwan in network namespaces)
+lab/gns3/               the same on real appliances in GNS3
 ```
 
 Scripts are plain (not ES modules) so the page works from `file://`. They share one global, `TM`, and must load in the order listed in `index.html`: core, vendors, analyze, baseline, pdf, app.

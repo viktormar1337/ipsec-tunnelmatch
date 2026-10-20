@@ -34,6 +34,7 @@ crypto ikev2 policy 10
  group ${S.dh}
  prf ${N.int[S.p1int]}
  lifetime seconds ${S.p1life}
+! Priority 10 is an example: with several peers, give each different policy its own number.
 crypto ikev2 enable ${outside}
 !
 crypto ipsec ikev2 ipsec-proposal PROP-${n}
@@ -76,6 +77,7 @@ crypto map ${map} 10 set peer ${c.peer.ip}
 crypto map ${map} 10 ${setProposal}
 ${S.pfs ? `crypto map ${map} 10 set pfs ${N.pfs(S.pfs)}\n` : ""}crypto map ${map} 10 set security-association lifetime seconds ${S.p2life}
 crypto map ${map} interface ${outside}
+! Sequence 10 is an example: every peer needs its own sequence number in ${map}.
 !
 nat (inside,${outside}) source static LOCAL-${n} LOCAL-${n} destination static REMOTE-${n} REMOTE-${n} no-proxy-arp route-lookup`;
     return c.eff.switched ? "! A VTI cannot narrow selectors, so this side is generated as a crypto map.\n" + o : o;

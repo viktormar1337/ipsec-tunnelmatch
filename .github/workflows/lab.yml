@@ -41,6 +41,12 @@ jobs:
       - name: Run lab
         run: sudo -E node lab/run.js
 
+      - name: GNS3 lab plan and driver self-test
+        if: always()
+        run: |
+          node lab/gns3/generate.js
+          sudo -E python3 lab/gns3/selftest.py
+
       - name: Keep the report
         if: always()
         uses: actions/upload-artifact@v4

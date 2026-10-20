@@ -8,7 +8,8 @@
  *   expect: "pass"  tunnel must come up, traffic must flow, algorithms must match
  *   expect: "fail"  negotiation must fail (proves the lab catches mismatches)
  *   emulate: per-side proposal overrides, used to reproduce how a platform
- *            behaves on the wire (for example PAN-OS picking the IKE PRF itself)
+ *            behaves on the wire (for example PAN-OS picking the IKE PRF itself),
+ *            or { vendor } to use that platform's own proposal spelling
  */
 "use strict";
 
@@ -45,6 +46,21 @@ const FIXED = [
     expect: "pass",
   },
   {
+    name: "OPNsense proposal spelling, recommended (aes256gcm16-sha384-ecp384 / aes256gcm16-ecp384)",
+    state: profile(RECOMMENDED),
+    // OPNsense only offers entries from its fixed list, written without "prf"
+    emulate: { A: { vendor: "opnsense" } },
+    vendors: { A: "opnsense", B: "strongswan" },
+    expect: "pass",
+  },
+  {
+    name: "OPNsense proposal spelling, minimum (aes256-sha256-modp2048)",
+    state: profile(MINIMUM),
+    emulate: { A: { vendor: "opnsense" } },
+    vendors: { A: "opnsense", B: "strongswan" },
+    expect: "pass",
+  },
+  {
     name: "PAN-OS ↔ Azure, IKE GCM with group 20: PAN-OS uses PRF SHA-384, Azure SHA-384",
     state: profile(RECOMMENDED),
     // PAN-OS sends no integrity with IKE GCM and derives the PRF from the DH group.
@@ -76,4 +92,4 @@ const FIXED = [
   },
 ];
 
-module.exports = { FIXED, BASE, profile };
+module.exports = { FIXED, BASE, profile, RECOMMENDED, MINIMUM };

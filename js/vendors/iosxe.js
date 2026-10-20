@@ -32,6 +32,8 @@ crypto ikev2 proposal PROP-${n}
 !
 crypto ikev2 policy POL-${n}
  proposal PROP-${n}
+ ! IOS-XE picks the IKEv2 policy by local address and VRF, not by peer: with
+ ! several peers, list every peer's proposal under one policy instead.
 !
 crypto ikev2 keyring KR-${n}
  peer ${n}
@@ -82,6 +84,7 @@ ${pfsLine} set security-association lifetime seconds ${S.p2life}
 !
 interface ${wan}
  crypto map CMAP
+! Sequence 10 is an example: every peer needs its own sequence number in CMAP.
 ! Exempt the VPN traffic from NAT (deny it in the NAT ACL).`;
     return c.eff.switched
       ? "! A route-based VTI cannot narrow selectors, so this side is generated as a crypto map.\n" + out

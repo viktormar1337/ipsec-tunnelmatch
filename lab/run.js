@@ -102,6 +102,8 @@ function parseProposal(str, ike) {
       if (ike && !out.prf) out.prf = SW.prf[t]; // strongSwan derives the PRF from the integrity algorithm
     } else if (SW.dh[t]) out.dh = SW.dh[t];
   }
+  // AEAD: an integrity token in an IKE proposal only names the PRF (OPNsense spelling)
+  if (/GCM/.test(out.encr || "")) delete out.integ;
   return out;
 }
 
@@ -270,7 +272,13 @@ function generate(state, emulate) {
   const out = {};
   for (const k of SIDES) {
     let conf = TM.vendor("strongswan").generate(TM.contextFor(s, k, R)).replace(/<PSK>/g, psk);
-    const e = (emulate || {})[k] || {};
+    const e = Object.assign({}, (emulate || {})[k]);
+    if (e.vendor) {
+      // another platform's own proposal spelling, e.g. OPNsense's fixed proposal list
+      const p = TM.vendor(e.vendor).proposals;
+      e.proposals = e.proposals || p.ike(s);
+      e.esp = e.esp || p.esp(s);
+    }
     if (e.proposals) conf = conf.replace(/^(\s*)proposals = .*$/m, `$1proposals = ${e.proposals}`);
     if (e.esp) conf = conf.replace(/^(\s*)esp_proposals = .*$/gm, `$1esp_proposals = ${e.esp}`);
     out[k] = conf;

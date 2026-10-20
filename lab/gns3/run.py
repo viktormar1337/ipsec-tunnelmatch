@@ -746,7 +746,10 @@ def main():
         n = plan["nodes"][nid]
         t = g.ensure_docker_template(n["template"], n["image"], compute) if nid == "strongswan" and not opt.dry_run else g.template(n["template"])
         if not t:
-            sys.exit(f"Template '{n['template']}' for {nid} not found on the GNS3 server. Import the appliance or fix the name in {user_cfg}.")
+            names = sorted(x["name"] for x in g.templates() if not x.get("builtin"))
+            sys.exit(f"Template '{n['template']}' for {nid} not found on the GNS3 server. Import the appliance or fix "
+                     f"nodes.{nid}.template in {user_cfg}.\nTemplates on the server: " + (", ".join(f"'{x}'" for x in names) or "none (no appliances imported yet)")
+                     + f"\nTo leave {nid} out for now: --nodes " + ",".join(k for k in ids if k != nid))
         templates[nid] = t
     switch = g.template(ttype="ethernet_switch")
     log("Templates: " + ", ".join(f"{nid}={templates[nid]['name']}" for nid in ids))

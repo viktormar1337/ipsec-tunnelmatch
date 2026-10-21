@@ -29,6 +29,7 @@ body:
         - IPFire
         - HPE Aruba gateway (AOS 8 / AOS 10)
         - Ubiquiti UniFi gateway
+        - Check Point Quantum (R81 / R82)
     validations:
       required: true
 

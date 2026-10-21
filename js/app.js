@@ -23,9 +23,9 @@
     p2enc: "aes256gcm", p2int: "aes256gcm", pfs: 14, p2life: 3600, p2kb: 102400000,
     checklist: {},
     A: { name: "Site A", vendor: "paloalto", ip: "203.0.113.10", nets: "10.10.0.0/16\n10.20.30.0/24",
-         mode: "route", iface: "ethernet1/1", tun: "tunnel.10", rg: "", gw: "", loc: "", cmode: "Default", types: "./types.bicep" },
+         mode: "route", iface: "ethernet1/1", tun: "tunnel.10", rg: "", gw: "", loc: "", cmode: "Default", iac: "bicep", types: "./types.bicep" },
     B: { name: "Site B", vendor: "azure", ip: "198.51.100.20", nets: "10.50.0.0/16",
-         mode: "route", iface: "", tun: "", rg: "rg-network-prod", gw: "vgw-hub-prod", loc: "swedencentral", cmode: "Default", types: "./types.bicep" },
+         mode: "route", iface: "", tun: "", rg: "rg-network-prod", gw: "vgw-hub-prod", loc: "swedencentral", cmode: "Default", iac: "bicep", types: "./types.bicep" },
   };
 
   function loadState() {
@@ -42,6 +42,7 @@
     SIDES.forEach((k) => {
       if (!s[k].types) s[k].types = "./types.bicep";
       if (!s[k].cmode) s[k].cmode = "Default";
+      if (!s[k].iac) s[k].iac = "bicep";
     });
     return s;
   }
@@ -51,8 +52,8 @@
 
   /* ---------- endpoint panels ---------- */
 
-  const SIDE_FIELDS = ["name", "ip", "nets", "iface", "tun", "rg", "gw", "loc", "types", "cmode", "mode"];
-  const SELECT_FIELDS = ["mode", "cmode"];
+  const SIDE_FIELDS = ["name", "ip", "nets", "iface", "tun", "rg", "gw", "loc", "types", "cmode", "iac", "mode"];
+  const SELECT_FIELDS = ["mode", "cmode", "iac"];
 
   function sidePanel(k) {
     const options = TM.vendorIds().map((id) => `<option value="${id}">${esc(TM.vendor(id).label)}</option>`).join("");
@@ -70,6 +71,7 @@
         <label id="${k}gwL">VPN gateway name<input id="${k}gw" class="mono"></label>
         <label id="${k}locL">Region<input id="${k}loc" class="mono"></label>
         <label id="${k}cmodeL">Connection mode<select id="${k}cmode"><option>Default</option><option>InitiatorOnly</option><option>ResponderOnly</option></select></label>
+        <label id="${k}iacL">Infrastructure as code<select id="${k}iac"><option value="bicep">Bicep (.bicepparam + main.bicep)</option><option value="terraform">Terraform (azurerm)</option></select></label>
         <label id="${k}typesL">Bicep types file (required)<input id="${k}types" class="mono" placeholder="./types.bicep"></label>
       </div>
       <p class="hint side-hint" id="${k}vhint"></p>`;
@@ -86,7 +88,8 @@
     $(k + "tunL").hidden = !f.tun;
     if (f.iface) $(k + "ifaceT").textContent = f.iface;
     if (f.tun) $(k + "tunT").textContent = f.tun;
-    ["rg", "gw", "loc", "cmode", "types"].forEach((x) => { $(k + x + "L").hidden = !f.azure; });
+    ["rg", "gw", "loc", "cmode", "iac", "types"].forEach((x) => { $(k + x + "L").hidden = !f.azure; });
+    if (f.azure && S[k].iac === "terraform") $(k + "typesL").hidden = true;
     $(k + "vhint").textContent = v.hint || "";
     $("h" + k).textContent = S[k].name || "Site " + k;
   }

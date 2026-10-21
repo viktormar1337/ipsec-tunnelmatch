@@ -20,7 +20,7 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 
 | Platform | Output | Status |
 |---|---|---|
-| Microsoft Azure VPN Gateway | `.bicepparam` + `main.bicep` (AVM `network/connection` 0.1.7 parameter names) | Verified |
+| Microsoft Azure VPN Gateway | Bicep: `.bicepparam` + `main.bicep` (AVM `network/connection` 0.1.7 parameter names), or Terraform: `.tfvars` + `main.tf` + `variables.tf` (azurerm 4.x, same inputs) | Verified |
 | Palo Alto Networks PAN-OS | `set` commands | Verified |
 | Cisco Meraki MX | Dashboard field values | Verified |
 | Fortinet FortiGate | FortiOS CLI | Syntax reference |

@@ -2,6 +2,7 @@
  * Microsoft Azure VPN Gateway
  * Rules: Microsoft Learn, custom IPsec/IKE connection policies (verified 2026-10-19).
  * Bicep: parameter names and allowed values follow AVM avm/res/network/connection 0.1.7.
+ * Terraform: azurerm_virtual_network_gateway_connection (azurerm 4.x), same inputs as the Bicep file.
  */
 (function () {
   "use strict";
@@ -25,6 +26,13 @@
     connectionMode: ["Default", "InitiatorOnly", "ResponderOnly"],
   };
 
+  /* Allowed values in the azurerm provider (azurerm_virtual_network_gateway_connection ipsec_policy).
+     Same set as AVM; checked against the provider docs 2026-10-21. */
+  const TF = {
+    dhGroup: ["DHGroup1", "DHGroup14", "DHGroup2", "DHGroup2048", "DHGroup24", "ECP256", "ECP384", "None"],
+    pfsGroup: ["ECP256", "ECP384", "PFS1", "PFS14", "PFS2", "PFS2048", "PFS24", "PFSMM", "None"],
+  };
+
   /* Azure has no DPD retry count: timeout = interval × retries, clamped to 9–3600 s. */
   const dpdTimeout = (S) => Math.min(3600, Math.max(9, (S.dpdInt || 0) * (S.dpdRetry || 0)));
 
@@ -44,7 +52,264 @@
 
   const quoteUnion = (list) => list.map((x) => `'${x}'`).join(" | ");
 
+  /* Terraform (azurerm 4.x): the same inputs as the Bicep parameter file, in snake_case. */
+  const hcl = (list) => "[" + list.map((x) => `"${x}"`).join(", ") + "]";
+
+  function generateTerraform(c) {
+    const S = c.S;
+    const pol = policy(S);
+    const usePB = c.eff.narrowed;
+    const lower = c.name.toLowerCase();
+    const file = lower + ".tfvars";
+
+    const tsp = usePB
+      ? "\n" + c.pairs.map(([l, r]) => `  {
+    local_address_ranges  = ["${l.text}"]
+    remote_address_ranges = ["${r.text}"]
+  },`).join("\n") + "\n"
+      : "";
+
+    const vars = `# Site ${c.k}: Azure VPN Gateway → ${c.peer.name} (${TM.vendor(c.peer.vendor).short})
+# Same inputs as the Bicep parameter file, in Terraform naming.
+resource_group_name        = "${c.me.rg || "<resource-group>"}"
+vpn_gateway_name           = "${c.me.gw || "<vpn-gateway>"}"
+location                   = "${c.me.loc || "<region>"}"
+local_network_gateway_name = "lng-${lower}"
+name                       = "cn-${lower}"
+
+# The peer, represented as a local network gateway
+peer_public_ip = "${c.peer.ip}"
+peer_address_prefixes = [
+${c.remote.map((r) => `  "${r.text}",`).join("\n")}
+]
+
+# vpn_shared_key is not set here: export TF_VAR_vpn_shared_key before plan/apply.
+
+connection_type                    = "IPsec"
+connection_mode                    = "${c.me.cmode || "Default"}"
+connection_protocol                = "IKEv2"
+dpd_timeout_seconds                = ${dpdTimeout(S)} # interval ${S.dpdInt} s × ${S.dpdRetry} retries
+use_policy_based_traffic_selectors = ${usePB}
+
+traffic_selector_policies = [${tsp}]
+
+custom_ipsec_policy = {
+  sa_lifetime_seconds    = ${pol.saLifeTimeSeconds}
+  sa_data_size_kilobytes = ${pol.saDataSizeKilobytes}
+  ipsec_encryption       = "${pol.ipsecEncryption}"
+  ipsec_integrity        = "${pol.ipsecIntegrity}"
+  ike_encryption         = "${pol.ikeEncryption}"
+  ike_integrity          = "${pol.ikeIntegrity}"${isGcm(S.p1enc) ? " # used as PRF with GCM" : ""}
+  dh_group               = "${pol.dhGroup}"
+  pfs_group              = "${pol.pfsGroup}"
+}
+
+# Deploy:
+#   export TF_VAR_vpn_shared_key='<pre-shared key>'   (PowerShell: $env:TF_VAR_vpn_shared_key = '...')
+#   export ARM_SUBSCRIPTION_ID='<subscription-id>'
+#   terraform init
+#   terraform apply -var-file=${file}
+# The IKE SA lifetime is fixed at 28,800 s on Azure VPN gateways.`;
+
+    const variables = `# variables.tf: inputs and allowed values (same as the Bicep template and AVM connection 0.1.7)
+variable "resource_group_name" {
+  description = "Resource group of the existing VPN gateway; the new resources go here too."
+  type        = string
+}
+
+variable "vpn_gateway_name" {
+  description = "Name of the existing route-based VPN gateway (VpnGw1+ SKU)."
+  type        = string
+}
+
+variable "location" {
+  description = "Location for the new resources."
+  type        = string
+}
+
+variable "local_network_gateway_name" {
+  description = "Name of the local network gateway that represents the peer."
+  type        = string
+}
+
+variable "name" {
+  description = "Connection name."
+  type        = string
+}
+
+variable "peer_public_ip" {
+  description = "Public IP of the peer VPN device."
+  type        = string
+}
+
+variable "peer_address_prefixes" {
+  description = "Address prefixes behind the peer."
+  type        = list(string)
+}
+
+variable "vpn_shared_key" {
+  description = "VPN shared key. Set it with TF_VAR_vpn_shared_key, never in a file."
+  type        = string
+  sensitive   = true
+}
+
+variable "connection_type" {
+  type    = string
+  default = "IPsec"
+  validation {
+    condition     = contains(["IPsec"], var.connection_type)
+    error_message = "connection_type must be IPsec."
+  }
+}
+
+variable "connection_mode" {
+  type    = string
+  default = "Default"
+  validation {
+    condition     = contains(${hcl(AVM.connectionMode)}, var.connection_mode)
+    error_message = "connection_mode must be Default, InitiatorOnly or ResponderOnly."
+  }
+}
+
+variable "connection_protocol" {
+  type    = string
+  default = "IKEv2"
+  validation {
+    condition     = contains(["IKEv1", "IKEv2"], var.connection_protocol)
+    error_message = "connection_protocol must be IKEv1 or IKEv2."
+  }
+}
+
+variable "dpd_timeout_seconds" {
+  type    = number
+  default = 45
+  validation {
+    condition     = var.dpd_timeout_seconds >= 9 && var.dpd_timeout_seconds <= 3600
+    error_message = "dpd_timeout_seconds must be 9-3600."
+  }
+}
+
+variable "use_policy_based_traffic_selectors" {
+  type    = bool
+  default = false
+}
+
+variable "traffic_selector_policies" {
+  type = list(object({
+    local_address_ranges  = list(string)
+    remote_address_ranges = list(string)
+  }))
+  default = []
+}
+
+variable "custom_ipsec_policy" {
+  description = "The custom IPsec/IKE policy for this connection."
+  type = object({
+    sa_lifetime_seconds    = number
+    sa_data_size_kilobytes = number
+    ipsec_encryption       = string
+    ipsec_integrity        = string
+    ike_encryption         = string
+    ike_integrity          = string
+    dh_group               = string
+    pfs_group              = string
+  })
+  validation {
+    condition = (
+      var.custom_ipsec_policy.sa_lifetime_seconds >= 300 &&
+      var.custom_ipsec_policy.sa_data_size_kilobytes >= 1024 &&
+      contains(${hcl(AVM.ipsecEncryption)}, var.custom_ipsec_policy.ipsec_encryption) &&
+      contains(${hcl(AVM.ipsecIntegrity)}, var.custom_ipsec_policy.ipsec_integrity) &&
+      contains(${hcl(AVM.ikeEncryption)}, var.custom_ipsec_policy.ike_encryption) &&
+      contains(${hcl(AVM.ikeIntegrity)}, var.custom_ipsec_policy.ike_integrity) &&
+      contains(${hcl(TF.dhGroup)}, var.custom_ipsec_policy.dh_group) &&
+      contains(${hcl(TF.pfsGroup)}, var.custom_ipsec_policy.pfs_group)
+    )
+    error_message = "custom_ipsec_policy has a value the azurerm provider does not allow (or a lifetime below 300 s / 1024 KB)."
+  }
+}`;
+
+    const main = `# main.tf: local network gateway + IPsec connection on an existing VPN gateway (azurerm 4.x)
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+  # azurerm 4.x needs a subscription: ARM_SUBSCRIPTION_ID or subscription_id = "..."
+}
+
+data "azurerm_virtual_network_gateway" "vpn" {
+  name                = var.vpn_gateway_name
+  resource_group_name = var.resource_group_name
+}
+
+resource "azurerm_local_network_gateway" "peer" {
+  name                = var.local_network_gateway_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  gateway_address     = var.peer_public_ip
+  address_space       = var.peer_address_prefixes
+}
+
+resource "azurerm_virtual_network_gateway_connection" "this" {
+  name                = var.name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+  type                       = var.connection_type
+  connection_mode            = var.connection_mode
+  connection_protocol        = var.connection_protocol
+  dpd_timeout_seconds        = var.dpd_timeout_seconds
+  virtual_network_gateway_id = data.azurerm_virtual_network_gateway.vpn.id
+  local_network_gateway_id   = azurerm_local_network_gateway.peer.id
+  shared_key                 = var.vpn_shared_key
+
+  use_policy_based_traffic_selectors = var.use_policy_based_traffic_selectors
+
+  ipsec_policy {
+    sa_lifetime      = var.custom_ipsec_policy.sa_lifetime_seconds
+    sa_datasize      = var.custom_ipsec_policy.sa_data_size_kilobytes
+    ipsec_encryption = var.custom_ipsec_policy.ipsec_encryption
+    ipsec_integrity  = var.custom_ipsec_policy.ipsec_integrity
+    ike_encryption   = var.custom_ipsec_policy.ike_encryption
+    ike_integrity    = var.custom_ipsec_policy.ike_integrity
+    dh_group         = var.custom_ipsec_policy.dh_group
+    pfs_group        = var.custom_ipsec_policy.pfs_group
+  }
+
+  dynamic "traffic_selector_policy" {
+    for_each = var.traffic_selector_policies
+    content {
+      local_address_cidrs  = traffic_selector_policy.value.local_address_ranges
+      remote_address_cidrs = traffic_selector_policy.value.remote_address_ranges
+    }
+  }
+}
+
+output "resource_id" {
+  value = azurerm_virtual_network_gateway_connection.this.id
+}
+
+output "name" {
+  value = azurerm_virtual_network_gateway_connection.this.name
+}`;
+
+    return [
+      { title: file, text: vars },
+      { title: "main.tf (resources)", text: main },
+      { title: "variables.tf (inputs and allowed values)", text: variables },
+    ];
+  }
+
   function generate(c) {
+    if (c.me.iac === "terraform") return generateTerraform(c);
     const S = c.S;
     const pol = policy(S);
     const usePB = c.eff.narrowed;
@@ -243,8 +508,10 @@ type trafficSelectorPolicyType = {
     if (raw < 9 || raw > 3600) add("err", `Azure DPD timeout must be 9–3600 s; interval × retries is ${raw} s.`);
     else if (raw < 30 || raw > 45) add("warn", `Azure DPD timeout becomes ${raw} s. Microsoft recommends 30–45 s.`);
 
+    const tf = me.iac === "terraform";
     const types = (me.types || "").trim();
-    if (!types)
+    if (tf) { /* Terraform needs no types file */ }
+    else if (!types)
       add("err", `Azure (site ${k}): a Bicep types file is required. main.bicep imports ipsecPolicyType and trafficSelectorPolicyType from it.`);
     else if (!/\.bicep$/.test(types) && !/^br[:/]/.test(types))
       add("warn", `Azure (site ${k}): the types file path should point to a .bicep file (or a br: registry reference).`);
@@ -254,7 +521,7 @@ type trafficSelectorPolicyType = {
       .filter((f) => AVM[f])
       .forEach((f) => {
         if (!AVM[f].includes(pol[f]))
-          add("err", `Azure (site ${k}): ${f} = '${pol[f]}' is not an allowed value in the AVM connection module.`, "crypto");
+          add("err", `Azure (site ${k}): ${f} = '${pol[f]}' is not an allowed value in ${tf ? "the azurerm provider" : "the AVM connection module"}.`, "crypto");
       });
 
     const mode = me.cmode || "Default";
@@ -308,10 +575,11 @@ type trafficSelectorPolicyType = {
     generate,
     sources: {
       status: "Verified 2026-10-19",
-      used: "Allowed IKE/IPsec algorithms, DH/PFS names, GCM pairing rule, fixed 28,800 s IKE SA, DPD 9–3600 s, SKU requirement, policy-based traffic selectors. Bicep parameter names and allowed values follow the AVM connection module 0.1.7.",
+      used: "Allowed IKE/IPsec algorithms, DH/PFS names, GCM pairing rule, fixed 28,800 s IKE SA, DPD 9–3600 s, SKU requirement, policy-based traffic selectors. Bicep parameter names and allowed values follow the AVM connection module 0.1.7; the Terraform output uses azurerm_virtual_network_gateway_connection (azurerm 4.x) with the same inputs.",
       links: [
         ["Microsoft Learn: Configure custom IPsec/IKE connection policies", "https://learn.microsoft.com/en-us/azure/vpn-gateway/ipsec-ike-policy-howto"],
         ["Microsoft Learn: Microsoft.Network/connections (Bicep)", "https://learn.microsoft.com/en-us/azure/templates/microsoft.network/connections?pivots=deployment-language-bicep"],
+        ["Terraform azurerm: azurerm_virtual_network_gateway_connection", "https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network_gateway_connection"],
         ["Azure Verified Modules: avm/res/network/connection", "https://github.com/Azure/bicep-registry-modules/tree/main/avm/res/network/connection"],
       ],
     },

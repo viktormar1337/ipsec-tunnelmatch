@@ -34,8 +34,12 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 | OpenWrt (strongSwan) | UCI commands for `/etc/config/ipsec` and the firewall | Verified |
 | Sophos Firewall (SFOS) | IPsec profile and connection field values | Verified |
 | IPFire | Net-to-Net field values with the stored setting names | Syntax reference |
+| HPE Aruba gateway (AOS 8 / AOS 10) | isakmp policy, transform-set, ipsec-map per subnet pair | Verified |
+| Ubiquiti UniFi gateway | Manual IPsec field values (route- or policy-based) | Syntax reference |
 
-"Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper, MikroTik, VyOS, OpenWrt and Sophos 2026-10-20). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
+"Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper, MikroTik, VyOS, OpenWrt and Sophos 2026-10-20; Aruba 2026-10-21). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
+
+Aruba Instant On is not included: HPE publishes no documentation of its site-to-site settings toward third-party peers. Screenshots of the Instant On VPN settings (via a [vendor correction](../../issues/new/choose) issue) would let us add it.
 
 IKEv2 only: every supported platform does IKEv2.
 

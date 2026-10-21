@@ -1,6 +1,9 @@
 # IPsec Tunnelmatch
 
+[![Open the tool](https://img.shields.io/badge/Open%20the%20tool-viktormar1337.github.io%2Fipsec--tunnelmatch-2ea44f?logo=github)](https://viktormar1337.github.io/ipsec-tunnelmatch/)
 [![Lab](https://github.com/viktormar1337/ipsec-tunnelmatch/actions/workflows/lab.yml/badge.svg)](https://github.com/viktormar1337/ipsec-tunnelmatch/actions/workflows/lab.yml)
+
+**▶ Use it here: <https://viktormar1337.github.io/ipsec-tunnelmatch/>**
 
 A single-page tool for matching IPsec site-to-site settings between two different vendors.
 
@@ -70,7 +73,7 @@ The Azure output imports `ipsecPolicyType` and `trafficSelectorPolicyType` from 
 
 ## Use
 
-Open `index.html` in a browser, or publish it with GitHub Pages. No build step: it also runs straight from a local folder. The PDF export loads jsPDF and jsPDF-AutoTable from cdnjs.
+Use the hosted version at <https://viktormar1337.github.io/ipsec-tunnelmatch/>, open `index.html` in a browser, or publish your own copy with GitHub Pages. No build step: it also runs straight from a local folder. The PDF export loads jsPDF and jsPDF-AutoTable from cdnjs.
 
 ## Project layout
 

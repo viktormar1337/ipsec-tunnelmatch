@@ -25,7 +25,7 @@
     const route = c.eff.mode === "route";
     const f = (k, v) => `  ${k.padEnd(28, ".")} ${v}`;
     return [
-      `UniFi Network, side ${c.k}`,
+      `UniFi Network, site ${c.k}`,
       "",
       "Settings > VPN > Site-to-Site VPN > Create New > Manual IPsec",
       f("Name", c.name),

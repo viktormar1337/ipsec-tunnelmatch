@@ -36,7 +36,7 @@
     const q = (s) => `"${s}"`;
 
     const L = [
-      `# MikroTik RouterOS 7, side ${c.k}. Paste in a terminal (CLI), section by section.`,
+      `# MikroTik RouterOS 7, site ${c.k}. Paste in a terminal (CLI), section by section.`,
       "/ip ipsec profile",
       `add name=${prof} enc-algorithm=${N.enc1[S.p1enc]} hash-algorithm=${N.hash[S.p1int]} prf-algorithm=${N.hash[S.p1int]} \\`,
       `    dh-group=${N.dh[S.dh]} lifetime=${rosTime(S.p1life)} dpd-interval=${S.dpdInt}s dpd-maximum-failures=${S.dpdRetry} nat-traversal=yes`,

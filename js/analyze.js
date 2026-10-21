@@ -41,12 +41,12 @@
     /* --- endpoints --- */
     SIDES.forEach((k) => {
       const x = parsed[k];
-      if (x.bad.length) add("err", `Side ${k}: invalid CIDR: ${x.bad.join(", ")}`);
+      if (x.bad.length) add("err", `Site ${k}: invalid CIDR: ${x.bad.join(", ")}`);
       x.nets.forEach((c) => {
-        if (c.ip !== c.net) add("warn", `Side ${k}: ${c.text} is not a network address (becomes ${netStr(c)}/${c.prefix}).`);
+        if (c.ip !== c.net) add("warn", `Site ${k}: ${c.text} is not a network address (becomes ${netStr(c)}/${c.prefix}).`);
       });
-      if (!x.nets.length) add("err", `Side ${k}: no local networks entered.`);
-      if (!validIp(S[k].ip)) add("err", `Side ${k}: public IP is missing or invalid.`);
+      if (!x.nets.length) add("err", `Site ${k}: no local networks entered.`);
+      if (!validIp(S[k].ip)) add("err", `Site ${k}: public IP is missing or invalid.`);
     });
     A.nets.forEach((a) => B.nets.forEach((b) => {
       if (overlap(a, b)) add("err", `Overlapping networks: ${a.text} (A) and ${b.text} (B). NAT is needed before this tunnel can work.`);
@@ -57,13 +57,13 @@
     const supported = (field, value, label) => SIDES.forEach((k) => {
       const v = TM.vendor(S[k].vendor);
       const group = field.replace(/^p[12]/, ""); // verify lists are keyed dh / pfs
-      if (!v.supports[field].includes(value)) add("err", `${label} is not supported by ${v.label} (side ${k}).`, "crypto");
+      if (!v.supports[field].includes(value)) add("err", `${label} is not supported by ${v.label} (site ${k}).`, "crypto");
       else {
         // verify lists may be keyed by field (p1int) or by group (int, dh, pfs)
         const list = v.verify[field] || v.verify[group];
         if (list && list.includes(value)) {
           const note = typeof v.verifyNote === "function" ? v.verifyNote(field, value) : v.verifyNote;
-          add("warn", `${label} on ${v.short} (side ${k}): ${note}`, "verify");
+          add("warn", `${label} on ${v.short} (site ${k}): ${note}`, "verify");
         }
       }
     });
@@ -109,11 +109,11 @@
       const v = TM.vendor(S[r].vendor);
       if (v.narrow) {
         eff[r].narrowed = true;
-        add("ok", `Side ${p} is policy-based and side ${r} is route-based. Side ${r} (${v.short}) gets narrow traffic selectors, one per subnet pair (${pairs.length}), instead of 0.0.0.0/0.` + (v.narrowNote ? " " + v.narrowNote : ""));
+        add("ok", `Site ${p} is policy-based and site ${r} is route-based. Site ${r} (${v.short}) gets narrow traffic selectors, one per subnet pair (${pairs.length}), instead of 0.0.0.0/0.` + (v.narrowNote ? " " + v.narrowNote : ""));
       } else {
         eff[r].mode = "policy";
         eff[r].switched = true;
-        add("warn", `Side ${r} (${v.short}) cannot narrow selectors on a route-based interface, so its config is generated as policy-based to match side ${p}.`);
+        add("warn", `Site ${r} (${v.short}) cannot narrow selectors on a route-based interface, so its config is generated as policy-based to match site ${p}.`);
       }
     };
     if (eff.A.mode === "policy" && eff.B.mode === "route") reconcile("B", "A");

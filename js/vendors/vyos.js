@@ -37,7 +37,7 @@
     const psk = `set vpn ipsec authentication psk PSK-${c.name}`;
 
     const L = [
-      `# VyOS 1.4/1.5 configuration mode, side ${c.k}. configure, paste, commit, save.`,
+      `# VyOS 1.4/1.5 configuration mode, site ${c.k}. configure, paste, commit, save.`,
       `set vpn ipsec interface '${wan}'`,
       `${psk} id '${c.me.ip}'`,
       `${psk} id '${c.peer.ip}'`,

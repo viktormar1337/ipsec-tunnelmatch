@@ -15,7 +15,7 @@
 
   function generate(c) {
     const S = c.S;
-    return `Meraki Dashboard, side ${c.k}
+    return `Meraki Dashboard, site ${c.k}
 Security & SD-WAN > Site-to-site VPN > Non-Meraki VPN peers > Add a peer
 
   Name .................. ${c.peer.name}
@@ -49,7 +49,7 @@ Select a single algorithm per field in the custom policy so the proposal is unam
   function checks({ S, k, A, B, add }) {
     const manySubnets = A.nets.length > 1 || B.nets.length > 1;
     if (manySubnets && S[k].mode === "policy")
-      add("warn", `Meraki MX (side ${k}) with IKEv2 sends a single traffic selector holding all local and remote subnets. Peers that expect one selector pair per SA (PAN-OS proxy-IDs, ASA crypto maps and others) will not match it. Summarize to one subnet per side, or use route-based on the MX (MX 19.2.7 or later).`);
+      add("warn", `Meraki MX (site ${k}) with IKEv2 sends a single traffic selector holding all local and remote subnets. Peers that expect one selector pair per SA (PAN-OS proxy-IDs, ASA crypto maps and others) will not match it. Summarize to one subnet per side, or use route-based on the MX (MX 19.2.7 or later).`);
   }
 
   function notes({ add }) {

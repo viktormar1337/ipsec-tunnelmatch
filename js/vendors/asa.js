@@ -22,7 +22,7 @@
     const map = outside.toUpperCase() + "_MAP";
     const setProposal = `set ikev2 ipsec-proposal PROP-${n}`;
 
-    let o = `! Cisco ASA, side ${c.k}
+    let o = `! Cisco ASA, site ${c.k}
 object-group network LOCAL-${n}
 ${c.local.map((l) => ` network-object ${netStr(l)} ${maskStr(l)}`).join("\n")}
 object-group network REMOTE-${n}

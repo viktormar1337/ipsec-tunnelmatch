@@ -25,7 +25,7 @@
     const f = (k, v) => `  ${k.padEnd(28, ".")} ${v}`;
 
     return [
-      `Sophos Firewall, side ${c.k}`,
+      `Sophos Firewall, site ${c.k}`,
       "",
       `1. System > Profiles > IPsec profiles > Add: ${prof}`,
       f("Key exchange", "IKEv2"),

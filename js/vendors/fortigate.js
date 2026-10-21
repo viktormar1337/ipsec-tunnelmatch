@@ -38,7 +38,7 @@ ${S.p2kb ? `        set keylife-type both\n        set keylifekbs ${S.p2kb}\n` :
         set device "${n}"
     next`).join("\n");
 
-    return `# FortiOS CLI, side ${c.k}
+    return `# FortiOS CLI, site ${c.k}
 config vpn ipsec phase1-interface
     edit "${n}"
         set interface "${wan}"

@@ -24,7 +24,7 @@
     const transform = `${N.esp[S.p2enc]}${g2 ? "" : " " + N.espInt[S.p2int]}`;
     const pfsLine = S.pfs ? ` set pfs ${N.pfs(S.pfs)}\n` : "";
 
-    const common = `! Cisco IOS-XE, side ${c.k}
+    const common = `! Cisco IOS-XE, site ${c.k}
 crypto ikev2 proposal PROP-${n}
  encryption ${N.enc[S.p1enc]}
  ${g1 ? "prf" : "integrity"} ${N.int[S.p1int]}

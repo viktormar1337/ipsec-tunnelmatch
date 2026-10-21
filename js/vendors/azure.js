@@ -66,7 +66,7 @@
 
     const params = `using './main.bicep'
 
-// Side ${c.k}: Azure VPN Gateway → ${c.peer.name} (${TM.vendor(c.peer.vendor).short})
+// Site ${c.k}: Azure VPN Gateway → ${c.peer.name} (${TM.vendor(c.peer.vendor).short})
 // Parameter names and allowed values follow avm/res/network/connection 0.1.7
 param vpnGatewayName = '${c.me.gw || "<vpn-gateway>"}'
 param location = '${c.me.loc || "<region>"}'
@@ -235,7 +235,7 @@ type trafficSelectorPolicyType = {
   function checks({ S, k, add }) {
     const me = S[k];
     if (S.p1life !== 28800)
-      add("warn", `Azure (side ${k}) always uses 28,800 s for the IKE SA. Lifetimes need not match, but set the peer to 28,800 to avoid rekey collisions.`);
+      add("warn", `Azure (site ${k}) always uses 28,800 s for the IKE SA. Lifetimes need not match, but set the peer to 28,800 to avoid rekey collisions.`);
     if (S.p2life < 300) add("err", "Azure requires a phase 2 lifetime of at least 300 s.");
     if (S.p2kb && S.p2kb < 1024) add("err", "Azure requires a phase 2 lifetime of at least 1,024 KB (or 0 for the default).");
 
@@ -245,23 +245,23 @@ type trafficSelectorPolicyType = {
 
     const types = (me.types || "").trim();
     if (!types)
-      add("err", `Azure (side ${k}): a Bicep types file is required. main.bicep imports ipsecPolicyType and trafficSelectorPolicyType from it.`);
+      add("err", `Azure (site ${k}): a Bicep types file is required. main.bicep imports ipsecPolicyType and trafficSelectorPolicyType from it.`);
     else if (!/\.bicep$/.test(types) && !/^br[:/]/.test(types))
-      add("warn", `Azure (side ${k}): the types file path should point to a .bicep file (or a br: registry reference).`);
+      add("warn", `Azure (site ${k}): the types file path should point to a .bicep file (or a br: registry reference).`);
 
     const pol = policy(S);
     Object.keys(pol)
       .filter((f) => AVM[f])
       .forEach((f) => {
         if (!AVM[f].includes(pol[f]))
-          add("err", `Azure (side ${k}): ${f} = '${pol[f]}' is not an allowed value in the AVM connection module.`, "crypto");
+          add("err", `Azure (site ${k}): ${f} = '${pol[f]}' is not an allowed value in the AVM connection module.`, "crypto");
       });
 
     const mode = me.cmode || "Default";
     if (!AVM.connectionMode.includes(mode))
-      add("err", `Azure (side ${k}): connectionMode must be Default, InitiatorOnly or ResponderOnly.`);
+      add("err", `Azure (site ${k}): connectionMode must be Default, InitiatorOnly or ResponderOnly.`);
     else if (mode !== "Default")
-      add("info", `Azure (side ${k}) is ${mode}: ${mode === "InitiatorOnly"
+      add("info", `Azure (site ${k}) is ${mode}: ${mode === "InitiatorOnly"
         ? "Azure starts the tunnel and never answers the peer's attempts."
         : "the peer must start the tunnel; Azure only responds."}`);
   }

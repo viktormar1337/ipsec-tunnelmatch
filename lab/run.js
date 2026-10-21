@@ -220,7 +220,7 @@ class Lab {
     for (const k of SIDES) {
       const sock = path.join(this.dir, k, "charon.vici");
       for (let i = 0; i < 50 && !fs.existsSync(sock); i++) await sleep(100);
-      if (!fs.existsSync(sock)) throw new Error(`strongSwan did not start on side ${k}`);
+      if (!fs.existsSync(sock)) throw new Error(`strongSwan did not start on site ${k}`);
       // Capture the negotiation log for the report.
       const logFile = fs.openSync(path.join(this.dir, k, "ike.log"), "w");
       // stdbuf keeps swanctl's output line-buffered so nothing is lost when it is stopped.
@@ -230,7 +230,7 @@ class Lab {
     }
     await sleep(300);
     this.loaded = {};
-    // Responder first, so side A's first attempt finds side B ready.
+    // Responder first, so site A's first attempt finds site B ready.
     for (const k of ["B", "A"]) this.loaded[k] = this.swanctl(k, "--load-all", "--file", path.join(this.dir, k, "swanctl.conf"));
   }
 
@@ -331,7 +331,7 @@ async function runScenario(bins, sc) {
     SIDES.forEach((k) => {
       const ok = /successfully loaded 1 connections/.test(lab.loaded[k]);
       const why = ok ? "" : ": " + (lab.loaded[k].split("\n").find((l) => /fail|error|denied|invalid|connecting/i.test(l)) || lab.loaded[k].trim().split("\n")[0] || "no output");
-      check(ok, `Side ${k} config loads in swanctl${why}`);
+      check(ok, `Site ${k} config loads in swanctl${why}`);
     });
 
     const ike = await lab.waitFor(children, sc.expect === "pass" ? 20 : 8);

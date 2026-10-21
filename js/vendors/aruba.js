@@ -41,7 +41,7 @@
     const pairs = c.anyAny ? [[{ text: "0.0.0.0/0" }, { text: "0.0.0.0/0" }]] : c.pairs;
     const vlan = (c.me.iface || "").replace(/\D/g, "") || "4094";
     const L = [
-      `! ArubaOS 8 / AOS 10 gateway, side ${c.k}. configure terminal, paste, write memory.`,
+      `! ArubaOS 8 / AOS 10 gateway, site ${c.k}. configure terminal, paste, write memory.`,
       `crypto isakmp policy ${prio}`,
       "  version v2",
       "  authentication pre-share",
@@ -84,7 +84,7 @@
 
   function checks({ S, k, add }) {
     for (const [what, v] of [["IKE lifetime", S.p1life], ["IPsec SA lifetime", S.p2life]])
-      if (v < 300 || v > 86400) add("err", `Aruba (side ${k}): ${what} must be 300–86400 s.`);
+      if (v < 300 || v > 86400) add("err", `Aruba (site ${k}): ${what} must be 300–86400 s.`);
   }
 
   function notes({ S, add }) {

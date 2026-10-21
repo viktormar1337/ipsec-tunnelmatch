@@ -28,7 +28,7 @@
     const tn = `set network tunnel ipsec TUN-${n}`;
 
     const L = [
-      `# PAN-OS set commands, side ${c.k}. Adjust zone and virtual/logical router to your setup.`,
+      `# PAN-OS set commands, site ${c.k}. Adjust zone and virtual/logical router to your setup.`,
       `${ike} encryption ${N.enc[S.p1enc]}`,
       `${ike} hash ${g1 ? "non-auth   # required with GCM; PRF follows the DH group" : N.int[S.p1int]}`,
       `${ike} dh-group ${N.dh(S.dh)}`,
@@ -67,13 +67,13 @@
     if (!isGcm(S.p1enc)) return;
     const prf = gcmPrf(S.dh);
     if (S.p1enc === "aes128gcm" && S.dh !== 19)
-      add("err", `PAN-OS (side ${k}): IKE aes-128-gcm requires DH group 19.`, "crypto");
+      add("err", `PAN-OS (site ${k}): IKE aes-128-gcm requires DH group 19.`, "crypto");
     if (S.p1enc === "aes256gcm" && S.dh !== 20)
-      add("warn", `PAN-OS (side ${k}): IKE aes-256-gcm should be paired with DH group 20.`, "crypto");
+      add("warn", `PAN-OS (site ${k}): IKE aes-256-gcm should be paired with DH group 20.`, "crypto");
     if (prf && prf !== S.p1int)
-      add("err", `PAN-OS (side ${k}) sets authentication to non-auth with IKE GCM and derives the PRF from the DH group (${intLabel(prf)} for group ${S.dh}). Set the PRF to ${intLabel(prf)} so the peer matches.`, "crypto");
+      add("err", `PAN-OS (site ${k}) sets authentication to non-auth with IKE GCM and derives the PRF from the DH group (${intLabel(prf)} for group ${S.dh}). Set the PRF to ${intLabel(prf)} so the peer matches.`, "crypto");
     if (!prf)
-      add("warn", `PAN-OS (side ${k}): the PRF used for IKE GCM with DH group ${S.dh} is not documented. Use group 19 or 20.`, "crypto");
+      add("warn", `PAN-OS (site ${k}): the PRF used for IKE GCM with DH group ${S.dh} is not documented. Use group 19 or 20.`, "crypto");
   }
 
   function notes({ add }) {

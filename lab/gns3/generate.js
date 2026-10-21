@@ -362,7 +362,7 @@ function mergeOpenwrt(node, tunnels) {
 function mergeStrongswan(node, tunnels) {
   const files = {};
   tunnels.forEach((t) => {
-    // the tool's first line is "# /etc/swanctl/conf.d/<name>.conf, side A"
+    // the tool's first line is "# /etc/swanctl/conf.d/<name>.conf, site A"
     const name = (t.text.match(/^# \/etc\/swanctl\/conf\.d\/([\w.-]+\.conf)\b/m) || [, `${t.peer.toLowerCase()}.conf`])[1];
     if (!/^[\w.-]+\.conf$/.test(name)) throw new Error(`strongSwan file name "${name}" for ${t.peer} does not end in .conf`);
     files[`/etc/swanctl/conf.d/${name}`] = t.text.replace(/<PSK>/g, t.psk) + "\n";

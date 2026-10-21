@@ -31,7 +31,7 @@
     const r = `ipsec.${n}`;
     const pairs = c.anyAny ? [[{ text: "0.0.0.0/0" }, { text: "0.0.0.0/0" }]] : c.pairs;
     const L = [
-      `# OpenWrt (strongswan-full), side ${c.k}: run in a shell on the router.`,
+      `# OpenWrt (strongswan-full), site ${c.k}: run in a shell on the router.`,
       "touch /etc/config/ipsec",
       `uci set ${r}=remote`,
       `uci set ${r}.enabled='1'`,

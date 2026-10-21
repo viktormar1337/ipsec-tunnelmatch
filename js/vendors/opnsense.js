@@ -148,7 +148,7 @@ Check status under VPN > IPsec > Status Overview.`;
       ? "\n\nRoute-based cannot narrow selectors here, so this side is generated as policy-based with one child per subnet pair."
       : "";
 
-    return `OPNsense, side ${c.k}: VPN > IPsec > Connections
+    return `OPNsense, site ${c.k}: VPN > IPsec > Connections
 (the Connections model; field names from docs.opnsense.org)
 
 ${psk}${vti}${connection}${routing}${firewall}${switched}`;
@@ -167,7 +167,7 @@ ${psk}${vti}${connection}${routing}${firewall}${switched}`;
   Rekey Time ............. ${S.p2life}
   Life Time .............. ${Math.floor(S.p2life / 0.9)}   (must be larger than Rekey Time)`).join("\n\n");
 
-    return `pfSense, side ${c.k}: VPN > IPsec > Tunnels (Phase 1 / Phase 2)
+    return `pfSense, site ${c.k}: VPN > IPsec > Tunnels (Phase 1 / Phase 2)
 (pfSense 2.7 field names)
 
 Phase 1
@@ -191,9 +191,9 @@ ${phase2}`;
   function checks({ S, k, add }) {
     const p1 = ike(S), p2 = esp(S);
     if (!opnValid(1, p1))
-      add("err", `OPNsense (side ${k}): the IKE proposal ${p1} is not in the Connections proposal list, so it cannot be selected.`, "crypto");
+      add("err", `OPNsense (site ${k}): the IKE proposal ${p1} is not in the Connections proposal list, so it cannot be selected.`, "crypto");
     if (!opnValid(2, p2))
-      add("err", `OPNsense (side ${k}): the ESP proposal ${p2} is not in the Connections proposal list, so it cannot be selected. Without PFS, only aes256gcm16, aes256-sha1 and aes256-sha256 exist.${S.pfs ? "" : " Turn on PFS (group 14 or higher)."}`, "crypto");
+      add("err", `OPNsense (site ${k}): the ESP proposal ${p2} is not in the Connections proposal list, so it cannot be selected. Without PFS, only aes256gcm16, aes256-sha1 and aes256-sha256 exist.${S.pfs ? "" : " Turn on PFS (group 14 or higher)."}`, "crypto");
   }
 
   function notes({ S, add }) {

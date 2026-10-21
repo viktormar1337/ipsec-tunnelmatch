@@ -52,7 +52,7 @@
     const vpn = `set security ipsec vpn VPN-${n}`;
 
     const L = [
-      `# Junos set commands, side ${c.k}. Adjust interfaces, zones and policies to your setup.`,
+      `# Junos set commands, site ${c.k}. Adjust interfaces, zones and policies to your setup.`,
       "# Phase 1",
       `${ike} authentication-method pre-shared-keys`,
       `${ike} dh-group ${N.dh(S.dh)}`,
@@ -120,15 +120,15 @@
   }
 
   function checks({ S, k, add }) {
-    if (S.p1life < 180 || S.p1life > 86400) add("err", `Juniper SRX (side ${k}): IKE lifetime-seconds must be 180–86400.`);
-    if (S.p2life < 180 || S.p2life > 86400) add("err", `Juniper SRX (side ${k}): IPsec lifetime-seconds must be 180–86400.`);
-    if (S.p2kb && S.p2kb < 64000) add("err", `Juniper SRX (side ${k}): lifetime-kilobytes must be at least 64000 (or 0 to leave it unset).`);
-    if (S.dpdInt < 2 || S.dpdInt > 60) add("err", `Juniper SRX (side ${k}): dead-peer-detection interval must be 2–60 s.`);
-    if (S.dpdRetry > 5) add("err", `Juniper SRX (side ${k}): dead-peer-detection threshold must be 1–5.`);
+    if (S.p1life < 180 || S.p1life > 86400) add("err", `Juniper SRX (site ${k}): IKE lifetime-seconds must be 180–86400.`);
+    if (S.p2life < 180 || S.p2life > 86400) add("err", `Juniper SRX (site ${k}): IPsec lifetime-seconds must be 180–86400.`);
+    if (S.p2kb && S.p2kb < 64000) add("err", `Juniper SRX (site ${k}): lifetime-kilobytes must be at least 64000 (or 0 to leave it unset).`);
+    if (S.dpdInt < 2 || S.dpdInt > 60) add("err", `Juniper SRX (site ${k}): dead-peer-detection interval must be 2–60 s.`);
+    if (S.dpdRetry > 5) add("err", `Juniper SRX (site ${k}): dead-peer-detection threshold must be 1–5.`);
     if (isGcm(S.p1enc)) {
-      add("warn", `Juniper SRX (side ${k}): with AES-GCM in IKE, Junos takes no authentication-algorithm and selects the PRF itself. Check that the negotiated PRF matches the peer (show security ike security-associations detail), or use AES-CBC in IKE.`, "crypto");
+      add("warn", `Juniper SRX (site ${k}): with AES-GCM in IKE, Junos takes no authentication-algorithm and selects the PRF itself. Check that the negotiated PRF matches the peer (show security ike security-associations detail), or use AES-CBC in IKE.`, "crypto");
       if (!isGcm(S.p2enc))
-        add("warn", `Juniper SRX (side ${k}): when IKE uses AES-GCM, Junos expects AES-GCM in the IPsec proposal as well.`, "crypto");
+        add("warn", `Juniper SRX (site ${k}): when IKE uses AES-GCM, Junos expects AES-GCM in the IPsec proposal as well.`, "crypto");
     }
   }
 

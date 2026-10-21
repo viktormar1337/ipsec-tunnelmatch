@@ -42,7 +42,7 @@
 ${c.remote.map((r) => `#   ip route add ${r.text} dev xfrm${ifid}`).join("\n")}`
       : "";
 
-    return `# /etc/swanctl/conf.d/${conn}.conf, side ${c.k}
+    return `# /etc/swanctl/conf.d/${conn}.conf, site ${c.k}
 connections {
   ${conn} {
     version = 2

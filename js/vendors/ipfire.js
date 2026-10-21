@@ -49,7 +49,7 @@
       f("Only propose settings above", "on"),
     ].join("\n"));
     return [
-      `IPFire, side ${c.k}`,
+      `IPFire, site ${c.k}`,
       "",
       ...blocks.flatMap((b) => [b, ""]),
       "Firewall: check that IKE (UDP 500, 4500) and ESP from the peer reach RED, and allow",
@@ -59,7 +59,7 @@
 
   function checks({ S, k, add }) {
     if (S.p1life % 3600 || S.p2life % 3600)
-      add("err", `IPFire (side ${k}): IKE lifetime and ESP keylife are set in whole hours; use multiples of 3600 s.`);
+      add("err", `IPFire (site ${k}): IKE lifetime and ESP keylife are set in whole hours; use multiples of 3600 s.`);
   }
 
   TM.register({

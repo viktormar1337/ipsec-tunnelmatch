@@ -57,7 +57,7 @@
   function sidePanel(k) {
     const options = TM.vendorIds().map((id) => `<option value="${id}">${esc(TM.vendor(id).label)}</option>`).join("");
     return `
-      <div class="panel-head"><h2 id="h${k}">Side ${k}</h2><span class="side-tag">${k}</span></div>
+      <div class="panel-head"><h2 id="h${k}">Site ${k}</h2><span class="side-tag">${k}</span></div>
       <div class="grid2">
         <label class="full">Platform<select id="${k}vendor">${options}</select></label>
         <label>Site / organisation<input id="${k}name"></label>
@@ -88,7 +88,7 @@
     if (f.tun) $(k + "tunT").textContent = f.tun;
     ["rg", "gw", "loc", "cmode", "types"].forEach((x) => { $(k + x + "L").hidden = !f.azure; });
     $(k + "vhint").textContent = v.hint || "";
-    $("h" + k).textContent = S[k].name || "Side " + k;
+    $("h" + k).textContent = S[k].name || "Site " + k;
   }
 
   /* ---------- crypto selects ---------- */
@@ -158,7 +158,7 @@
 
     if (!R.selectors) {
       $("tsTable").innerHTML = `
-        <thead><tr><th>Side A local</th><th></th><th>Side B local</th></tr></thead>
+        <thead><tr><th>Site A local</th><th></th><th>Site B local</th></tr></thead>
         <tbody>
           <tr><td class="mono">0.0.0.0/0</td><td>⇄</td><td class="mono">0.0.0.0/0</td></tr>
           <tr><td colspan="3" class="hint">Routes decide the traffic: A routes ${esc(R.B.nets.map((x) => x.text).join(", "))}
@@ -170,7 +170,7 @@
       .map(([a, b], i) => `<tr><td class="mono">${i + 1}</td><td class="mono">${esc(a.text)}</td><td>⇄</td><td class="mono">${esc(b.text)}</td></tr>`)
       .join("");
     $("tsTable").innerHTML = `
-      <thead><tr><th>#</th><th>Side A local</th><th></th><th>Side B local</th></tr></thead>
+      <thead><tr><th>#</th><th>Site A local</th><th></th><th>Site B local</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4" class="hint">No valid networks.</td></tr>`}</tbody>`;
   }
 
@@ -241,8 +241,8 @@
     const params = new URLSearchParams({
       template: "working_config.yml",
       title: `[Works]: ${va.short} ↔ ${vb.short}`,
-      "side-a-platform": va.label,
-      "side-b-platform": vb.label,
+      "site-a-platform": va.label,
+      "site-b-platform": vb.label,
       "vpn-type-a": typeLabel(R.eff.A),
       "vpn-type-b": typeLabel(R.eff.B),
       settings,
@@ -257,8 +257,8 @@
 
   function renderTabs() {
     const tabs = [
-      ["A", `Side A · ${TM.vendor(S.A.vendor).short}`],
-      ["B", `Side B · ${TM.vendor(S.B.vendor).short}`],
+      ["A", `Site A · ${TM.vendor(S.A.vendor).short}`],
+      ["B", `Site B · ${TM.vendor(S.B.vendor).short}`],
       ["names", "Name mapping"],
     ];
     $("tabs").innerHTML = tabs

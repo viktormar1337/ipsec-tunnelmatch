@@ -25,9 +25,9 @@ body:
       required: true
 
   - type: dropdown
-    id: side-a
+    id: site-a
     attributes:
-      label: Side A platform
+      label: Site A platform
       options:
         - Microsoft Azure VPN Gateway
         - Palo Alto Networks PAN-OS
@@ -49,9 +49,9 @@ body:
       required: true
 
   - type: dropdown
-    id: side-b
+    id: site-b
     attributes:
-      label: Side B platform
+      label: Site B platform
       options:
         - Microsoft Azure VPN Gateway
         - Palo Alto Networks PAN-OS

@@ -11,9 +11,9 @@ body:
         **Never paste a pre-shared key, real public IPs or internal network ranges.** Opening this form from the tool's "Report a working configuration" button fills in the platforms and settings for you.
 
   - type: dropdown
-    id: side-a-platform
+    id: site-a-platform
     attributes:
-      label: Side A platform
+      label: Site A platform
       options:
         - Microsoft Azure VPN Gateway
         - Palo Alto Networks PAN-OS
@@ -35,24 +35,24 @@ body:
       required: true
 
   - type: input
-    id: side-a-version
+    id: site-a-version
     attributes:
-      label: Side A OS / firmware version
+      label: Site A OS / firmware version
       description: Exact version, for example PAN-OS 11.1.6-h3, MX 19.2.7, FortiOS 7.4.5, IOS-XE 17.12.4, Junos 23.4R2-S3, strongSwan 6.0.1. For Azure, the gateway SKU and generation (for example VpnGw2AZ, Generation 2).
       placeholder: PAN-OS 11.1.6-h3
     validations:
       required: true
 
   - type: input
-    id: side-a-model
+    id: site-a-model
     attributes:
-      label: Side A model (optional)
+      label: Site A model (optional)
       placeholder: PA-3410, MX85, FG-100F, SRX345, VM-Series
 
   - type: dropdown
     id: vpn-type-a
     attributes:
-      label: Side A VPN type
+      label: Site A VPN type
       options:
         - Route-based (VTI)
         - Policy-based
@@ -60,9 +60,9 @@ body:
       required: true
 
   - type: dropdown
-    id: side-b-platform
+    id: site-b-platform
     attributes:
-      label: Side B platform
+      label: Site B platform
       options:
         - Microsoft Azure VPN Gateway
         - Palo Alto Networks PAN-OS
@@ -84,23 +84,23 @@ body:
       required: true
 
   - type: input
-    id: side-b-version
+    id: site-b-version
     attributes:
-      label: Side B OS / firmware version
+      label: Site B OS / firmware version
       description: Exact version, or SKU and generation for Azure.
       placeholder: VpnGw2AZ, Generation 2
     validations:
       required: true
 
   - type: input
-    id: side-b-model
+    id: site-b-model
     attributes:
-      label: Side B model (optional)
+      label: Site B model (optional)
 
   - type: dropdown
     id: vpn-type-b
     attributes:
-      label: Side B VPN type
+      label: Site B VPN type
       options:
         - Route-based (VTI)
         - Policy-based

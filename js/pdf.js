@@ -23,9 +23,9 @@
     const { eff } = R;
     const notes = [];
     if (eff.A.narrowed || eff.B.narrowed)
-      notes.push(`Side ${eff.A.narrowed ? "A" : "B"} is route-based and narrows its traffic selectors to the subnet pairs above to match the policy-based peer.`);
+      notes.push(`Site ${eff.A.narrowed ? "A" : "B"} is route-based and narrows its traffic selectors to the subnet pairs above to match the policy-based peer.`);
     if (eff.A.switched || eff.B.switched)
-      notes.push(`Side ${eff.A.switched ? "A" : "B"} is configured policy-based so its selectors match the peer.`);
+      notes.push(`Site ${eff.A.switched ? "A" : "B"} is configured policy-based so its selectors match the peer.`);
     ["A", "B"].forEach((k) => {
       const v = TM.vendor(S[k].vendor);
       if (v.pdfNote) v.pdfNote(S, eff[k]).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
@@ -73,7 +73,7 @@
 
     table({
       startY: 84,
-      head: [["Endpoint", "Side A", "Side B"]],
+      head: [["Endpoint", "Site A", "Site B"]],
       body: [
         ["Site / organisation", S.A.name, S.B.name],
         ["Platform", va.label, vb.label],
@@ -111,7 +111,7 @@
 
     table({
       startY: next(),
-      head: [["#", "Side A local", "Side B local"]],
+      head: [["#", "Site A local", "Site B local"]],
       body: R.selectors
         ? R.selectors.map(([a, b], i) => [String(i + 1), a.text, b.text])
         : [["-", "0.0.0.0/0 (route-based)", "0.0.0.0/0 (route-based)"]],

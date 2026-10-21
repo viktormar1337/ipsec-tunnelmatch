@@ -16,15 +16,15 @@
 
   const STORAGE_KEY = "ipsec-tunnelmatch-v2";
   const DEFAULTS = {
-    tunnelName: "SIDE-A-SIDE-B-01",
+    tunnelName: "SITE-A-SITE-B-01",
     author: "",
     p1enc: "aes256", p1int: "sha256", dh: 14, p1life: 28800,
     dpdInt: 10, dpdRetry: 3,
     p2enc: "aes256gcm", p2int: "aes256gcm", pfs: 14, p2life: 3600, p2kb: 102400000,
     checklist: {},
-    A: { name: "Side A", vendor: "paloalto", ip: "203.0.113.10", nets: "10.10.0.0/16\n10.20.30.0/24",
+    A: { name: "Site A", vendor: "paloalto", ip: "203.0.113.10", nets: "10.10.0.0/16\n10.20.30.0/24",
          mode: "route", iface: "ethernet1/1", tun: "tunnel.10", rg: "", gw: "", loc: "", cmode: "Default", types: "./types.bicep" },
-    B: { name: "Side B", vendor: "azure", ip: "198.51.100.20", nets: "10.50.0.0/16",
+    B: { name: "Site B", vendor: "azure", ip: "198.51.100.20", nets: "10.50.0.0/16",
          mode: "route", iface: "", tun: "", rg: "rg-network-prod", gw: "vgw-hub-prod", loc: "swedencentral", cmode: "Default", types: "./types.bicep" },
   };
 
@@ -36,9 +36,9 @@
     delete s.psk; delete s.pskInPdf; delete s.ikev;
     if (!s.checklist) s.checklist = {};
     // Older default names: replace them unless they were changed.
-    if (s.tunnelName === "HQ-AZURE-PROD-01") s.tunnelName = DEFAULTS.tunnelName;
-    if (s.A.name === "Head office") s.A.name = DEFAULTS.A.name;
-    if (s.B.name === "Azure prod") s.B.name = DEFAULTS.B.name;
+    if (["HQ-AZURE-PROD-01", "SIDE-A-SIDE-B-01"].includes(s.tunnelName)) s.tunnelName = DEFAULTS.tunnelName;
+    if (["Head office", "Side A"].includes(s.A.name)) s.A.name = DEFAULTS.A.name;
+    if (["Azure prod", "Side B"].includes(s.B.name)) s.B.name = DEFAULTS.B.name;
     SIDES.forEach((k) => {
       if (!s[k].types) s[k].types = "./types.bicep";
       if (!s[k].cmode) s[k].cmode = "Default";

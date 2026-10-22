@@ -2,3 +2,4 @@ lab/results/
 lab/gns3/out/
 lab/gns3/results/
 lab/gns3/lab.json
+__pycache__/

@@ -352,10 +352,16 @@ function mergeOpenwrt(node, tunnels) {
   ];
   tunnels.forEach((t) => {
     t.text.replace(/<PSK>/g, t.psk).split("\n").map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("#") && !/^\/etc\/init\.d\//.test(l))
+      .filter((l) => l && !l.startsWith("#") && !/^(\/etc\/init\.d\/|\[ -x \/etc\/init\.d\/ipsec|killall )/.test(l))
       .forEach((l) => lines.push(l));
   });
-  lines.push("/etc/init.d/firewall restart", "/etc/init.d/swanctl restart", "sleep 3", "swanctl --list-conns | grep -c IKEv2");
+  lines.push(
+    "/etc/init.d/firewall restart",
+    "[ -x /etc/init.d/ipsec ] && { /etc/init.d/ipsec stop; /etc/init.d/ipsec disable; }",
+    "killall -q -9 charon swanctl",
+    "/etc/init.d/swanctl enable",
+    "/etc/init.d/swanctl restart",
+  );
   return { shell: lines };
 }
 

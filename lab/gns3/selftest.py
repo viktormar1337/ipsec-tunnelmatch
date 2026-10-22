@@ -143,6 +143,19 @@ JUNOS_IPSEC = """  ID: 500001 Virtual-system: root, VPN Name: VPN-STRONGSWAN
     PFS (group): DH-group-20
 """
 
+# both ends initiated at once: a CONNECTING duplicate listed before the established IKE_SA
+SWANCTL_TWO_SAS = (
+    "list-sa event {opnsense {uniqueid=2 version=2 state=CONNECTING local-host=203.0.113.14 local-port=500 "
+    "remote-host=203.0.113.13 remote-port=500 initiator=yes initiator-spi=1a2b3c4d5e6f7081 responder-spi=0000000000000000 "
+    "child-sas {}}}\n"
+    "list-sa event {opnsense {uniqueid=1 version=2 state=ESTABLISHED local-host=203.0.113.14 local-port=4500 "
+    "remote-host=203.0.113.13 remote-port=4500 initiator-spi=013f0f36ce63f929 responder-spi=9db5f2f12bda2cdb "
+    "encr-alg=AES_GCM_16 encr-keysize=256 prf-alg=PRF_HMAC_SHA2_384 dh-group=ECP_384 established=40 "
+    "child-sas {opnsense-1-2 {name=opnsense-1 uniqueid=2 reqid=1 state=INSTALLED mode=TUNNEL protocol=ESP "
+    "encr-alg=AES_GCM_16 encr-keysize=256 packets-in=5 packets-out=5 local-ts=[10.4.0.0/24] remote-ts=[10.3.0.0/24]}}}}\n"
+    "list-sas reply {}\n"
+)
+
 
 def test_parsers():
     r = run.parse_cisco_ikev2(IOSXE_IKEV2, "203.0.113.12")
@@ -167,6 +180,10 @@ def test_parsers():
     check(r == {"ike": {"state": "ESTABLISHED"}, "esp": {"encr": "AES-GCM-256", "integ": None},
                 "counters": {"encaps": 760, "decaps": 840}}, f"RouterOS active-peers / installed-sa: {r}")
     check(run.parse_routeros_sas(ROS_PEERS, ROS_SAS, "203.0.113.16", "203.0.113.99") is None, "RouterOS: unknown peer gives None")
+    r = run.parse_swanctl_raw(SWANCTL_TWO_SAS, "203.0.113.13")
+    check(r and r["ike"]["state"] == "ESTABLISHED" and r["esp"] == {"encr": "AES-GCM-256", "integ": None}
+          and r["counters"] == {"encaps": 5, "decaps": 5}, f"swanctl: established IKE_SA preferred over a CONNECTING duplicate: {r}")
+    check(run.parse_swanctl_raw(SWANCTL_TWO_SAS, "203.0.113.99") is None, "swanctl: unknown peer gives None")
     check(run.ping_ok("  SEQ HOST    SIZE TTL TIME\n    sent=5 received=4 packet-loss=20% min-rtt=1ms") == (4, 5), "RouterOS ping")
     check(run.ping_ok("Success rate is 80 percent (4/5), round-trip min/avg/max = 1/2/4 ms") == (4, 5), "Cisco ping")
     check(run.ping_ok("5 packets transmitted, 5 packets received, 0.0% packet loss") == (5, 5), "FreeBSD ping")

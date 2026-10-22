@@ -26,7 +26,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
@@ -64,14 +64,17 @@ class Gns3:
             r = self._raw("POST", "/v3/access/users/authenticate", {"username": user, "password": password})
             self.token = r["access_token"]
 
-    def _raw(self, method, path, body=None):
-        data = json.dumps(body).encode() if body is not None else None
-        req = urllib.request.Request(self.url + path, data=data, method=method)
-        req.add_header("Content-Type", "application/json")
+    def _auth(self, req):
         if self.token:
             req.add_header("Authorization", "Bearer " + self.token)
         elif self.user and self.v == "v2":  # 2.2 servers with auth = True in gns3_server.conf
             req.add_header("Authorization", "Basic " + base64.b64encode(f"{self.user}:{self.password}".encode()).decode())
+
+    def _raw(self, method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(self.url + path, data=data, method=method)
+        req.add_header("Content-Type", "application/json")
+        self._auth(req)
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 raw = r.read()
@@ -82,6 +85,40 @@ class Gns3:
 
     def api(self, method, path, body=None):
         return self._raw(method, f"/{self.v}{path}", body)
+
+    def images(self):
+        """QEMU images on the server: {filename: size}."""
+        if self.v == "v2":
+            return {i["filename"]: i.get("filesize") for i in self.api("GET", "/compute/qemu/images")}
+        return {i["filename"]: i.get("image_size") for i in self.api("GET", "/images?image_type=qemu")}
+
+    def upload_image(self, filename, path):
+        """Stream a local file into the server's QEMU images folder; the server writes it as its own user."""
+        url = f"{self.url}/v2/compute/qemu/images/{quote(filename)}" if self.v == "v2" else f"{self.url}/v3/images/upload/{quote(filename)}"
+        with open(path, "rb") as f:
+            req = urllib.request.Request(url, data=f, method="POST")
+            req.add_header("Content-Type", "application/octet-stream")
+            req.add_header("Content-Length", str(os.path.getsize(path)))
+            self._auth(req)
+            try:
+                with urllib.request.urlopen(req, timeout=600) as r:
+                    r.read()
+            except urllib.error.HTTPError as e:
+                raise RuntimeError(f"GNS3 upload {filename}: HTTP {e.code} {e.read().decode(errors='replace')[:300]}") from None
+
+    def download(self, path, dst):
+        """Stream an API resource (a project file, an image) to a local file."""
+        req = urllib.request.Request(f"{self.url}/{self.v}{quote(path)}", method="GET")
+        self._auth(req)
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r, open(dst, "wb") as f:
+                while True:
+                    block = r.read(1 << 20)
+                    if not block:
+                        break
+                    f.write(block)
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"GNS3 GET {path}: HTTP {e.code} {e.read().decode(errors='replace')[:300]}") from None
 
     def templates(self):
         return self.api("GET", "/templates")
@@ -161,6 +198,10 @@ IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
 # CSI sequences, OSC titles, charset selects and single-character escapes such as ESC 7 / ESC 8
 # (save/restore cursor, which pfSense's resizewin sends around its terminal-size query)
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Z0-9]|\x1b[78=>DEHMNOZc]|\x07")
+# an escape sequence cut off at the end of a read; kept until the rest arrives
+ANSI_TAIL = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*|\][^\x07\x1b]*|[()])?$")
+# cursor position query (resizewin): unanswered, it times out and swallows what we type meanwhile
+DSR = "\x1b[6n"
 
 
 class Console:
@@ -174,6 +215,7 @@ class Console:
         self.log = open(logfile, "a", encoding="utf-8")
         self._sb = False
         self._pending = b""
+        self._esc = ""  # incomplete escape sequence from the previous read
         self._answered = {}  # (cmd, opt) -> reply already sent; never answer the same thing twice
 
     def close(self):
@@ -242,7 +284,12 @@ class Console:
             return False
         if not data:
             raise ConnectionError("console closed")
-        text = self._negotiate(data).decode("utf-8", errors="replace")
+        text = self._esc + self._negotiate(data).decode("utf-8", errors="replace")
+        tail = ANSI_TAIL.search(text)
+        self._esc = tail.group(0) if tail else ""
+        text = text[: len(text) - len(self._esc)]
+        if DSR in text:
+            self.sock.sendall(b"\x1b[24;80R")  # what an 80x25 terminal answers
         text = ANSI.sub("", text).replace("\r\n", "\n").replace("\r", "")
         self.buf += text
         self.log.write(self._mask(text))
@@ -367,6 +414,7 @@ def parse_swanctl_raw(raw, peer):
             out["dh" if ike else "pfs"] = SW_DH.get(dh, dh)
         return out
 
+    found = []
     for line in raw.splitlines():
         if not line.startswith("list-sa event {"):
             continue
@@ -385,8 +433,11 @@ def parse_swanctl_raw(raw, peer):
                 esp = algs(installed[0], False)
                 counters = {"encaps": sum(int(field(k, "packets-out") or 0) for k in installed),
                             "decaps": sum(int(field(k, "packets-in") or 0) for k in installed)}
-        return {"ike": ike, "esp": esp, "counters": counters}
-    return None
+        found.append({"ike": ike, "esp": esp, "counters": counters})
+    # when both ends initiated at once there can be a second IKE_SA, still CONNECTING or
+    # about to be deleted as a duplicate: report the established one that carries the traffic
+    found.sort(key=lambda r: (r["ike"]["state"] != "ESTABLISHED", not r["esp"]))
+    return found[0] if found else None
 
 
 def parse_routeros_sas(peers_text, sa_text, me, peer):
@@ -639,6 +690,7 @@ class FreeBsdFirewall(Shell):
             (r"^Password:\s*$", pw),
             (r"Enter an option:\s*$", "8"),
             (self.shell_prompt, "/bin/sh"),
+            (self.prompt, None),  # --reuse: still in the shell from the last run
         ]
         end = time.time() + timeout
         self.con.sendline()
@@ -648,10 +700,23 @@ class FreeBsdFirewall(Shell):
             except TimeoutError:
                 self.con.sendline()
                 continue
-            self.con.sendline(answers[i][1])
-            if i == 3:
+            if i == 4:
+                self.con.drain(1)
                 self.set_prompt()
                 return
+            if i == 3:
+                # pfSense's shell runs resizewin before each prompt; let it finish, or it
+                # reads what we type as its terminal-size answer
+                self.con.drain(2)
+                self.con.sendline("/bin/sh")
+                self.con.drain(2)
+                try:
+                    self.set_prompt()
+                except TimeoutError:
+                    self.con.drain(2)
+                    self.set_prompt()
+                return
+            self.con.sendline(answers[i][1])
         raise TimeoutError(f"{self.product} did not reach a shell")
 
     def apply(self):
@@ -924,8 +989,14 @@ class OpenWrt(Shell):
             out = self.run(cmd, 120)
             for bad in re.findall(r"(?mi)^.*(?:TMLAB-MISSING|uci: |not found|invalid|error).*$", out):
                 self.errors.append(f"{cmd} → {bad.strip()}")
-        last = self.run("swanctl --list-conns | grep -c IKEv2", 30).strip().splitlines()
-        if not last or not last[0].strip().isdigit() or int(last[0]) == 0:
+        # charon takes a few seconds to load its plugins after the restart; until then
+        # swanctl is refused or blocks on the vici socket
+        for _ in range(10):
+            self.run("sleep 3", 10)
+            last = self.run("swanctl --list-conns 2>/dev/null | grep -c IKEv2", 90).strip().splitlines()
+            if last and last[0].strip().isdigit() and int(last[0]) > 0:
+                break
+        else:
             self.errors.append("swanctl lists no IKEv2 connections after the restart")
 
     def ping(self, src, dst):

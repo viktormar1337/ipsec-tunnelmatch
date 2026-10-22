@@ -12,6 +12,9 @@ this on the GNS3 server machine:
 
 It copies the node's installed disk into the GNS3 images folder as a standalone image
 and creates the template: same settings as the template the node came from, but booting that disk, no ISO, and a telnet (serial) console.
+If the server's project folder is not readable from here (the server runs as root, or on
+another machine), it downloads the disk and its base image through the API, flattens
+them with qemu-img and uploads the result instead.
 """
 
 import argparse
@@ -21,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -59,29 +63,49 @@ def main():
     if node["status"] != "stopped":
         sys.exit(f"Node '{node['name']}' is {node['status']}. Shut it down first (pfSense: menu 6, Halt; OpenWrt: poweroff) and stop the node.")
 
-    disk = os.path.join(project["path"], "project-files", "qemu", node["node_id"], "hda_disk.qcow2")
-    if not os.path.exists(disk):
-        sys.exit(f"Installed disk not found at {disk}. Run this on the GNS3 server machine, after the node was prepared and started at least once.")
-    images = opt.images_dir or os.path.join(os.path.dirname(os.path.dirname(project["path"])), "images", "QEMU")
-    if not os.path.isdir(images):
-        sys.exit(f"Images folder {images} not found; pass --images-dir.")
+    rel = f"project-files/qemu/{node['node_id']}/hda_disk.qcow2"
+    disk = os.path.join(project["path"], *rel.split("/"))
     image = re.sub(r"[^a-z0-9]+", "-", opt.name.lower()).strip("-") + ".qcow2"  # pfsense-2-7-2-tmlab.qcow2
-    dst = os.path.join(images, image)
-
-    existing = g.template(opt.name)
-    if (existing or os.path.exists(dst)) and not opt.replace:
-        sys.exit(f"Template '{opt.name}' or image {dst} already exists; pass --replace to overwrite.")
-
     qemu_img = shutil.which("qemu-img")
     if not qemu_img:
         sys.exit("qemu-img not found (apt install qemu-utils).")
-    print(f"Copying the installed disk to {dst}")
-    subprocess.run([qemu_img, "convert", "-O", "qcow2", disk, dst], check=True)
-    st = os.stat(images)
-    try:
-        os.chown(dst, st.st_uid, st.st_gid)  # the GNS3 server user must own it
-    except PermissionError:
-        print(f"Note: could not change the owner of {dst}; make sure the GNS3 server user can read it.")
+    existing = g.template(opt.name)
+
+    if os.access(disk, os.R_OK):
+        images = opt.images_dir or os.path.join(os.path.dirname(os.path.dirname(project["path"])), "images", "QEMU")
+        if not os.path.isdir(images):
+            sys.exit(f"Images folder {images} not found; pass --images-dir.")
+        dst = os.path.join(images, image)
+        if (existing or os.path.exists(dst)) and not opt.replace:
+            sys.exit(f"Template '{opt.name}' or image {dst} already exists; pass --replace to overwrite.")
+        print(f"Copying the installed disk to {dst}")
+        subprocess.run([qemu_img, "convert", "-O", "qcow2", disk, dst], check=True)
+        st = os.stat(images)
+        try:
+            os.chown(dst, st.st_uid, st.st_gid)  # the GNS3 server user must own it
+        except PermissionError:
+            print(f"Note: could not change the owner of {dst}; make sure the GNS3 server user can read it.")
+    else:
+        # The server's folders are not readable here (server runs as another user, or on
+        # another machine): fetch the disk and its base image through the API instead.
+        if (existing or image in g.images()) and not opt.replace:
+            sys.exit(f"Template '{opt.name}' or image {image} already exists; pass --replace to overwrite.")
+        with tempfile.TemporaryDirectory() as tmp:
+            overlay = os.path.join(tmp, "hda_disk.qcow2")
+            print("Disk not readable here; downloading it through the GNS3 API")
+            g.download(f"/projects/{pid}/files/{rel}", overlay)
+            info = json.loads(subprocess.run([qemu_img, "info", "--output=json", overlay], capture_output=True, text=True, check=True).stdout)
+            backing = info.get("backing-filename")
+            if backing:  # linked clone: needs its base image too
+                base = os.path.join(tmp, os.path.basename(backing))
+                print(f"Downloading its base image {os.path.basename(backing)}")
+                g.download(f"/compute/qemu/images/{os.path.basename(backing)}", base)
+                fmt = info.get("backing-filename-format") or ("qcow2" if base.endswith(".qcow2") else "raw")
+                subprocess.run([qemu_img, "rebase", "-u", "-F", fmt, "-b", base, overlay], check=True)
+            flat = os.path.join(tmp, image)
+            subprocess.run([qemu_img, "convert", "-O", "qcow2", overlay, flat], check=True)
+            print(f"Uploading {image}")
+            g.upload_image(image, flat)
 
     source = g.api("GET", f"/templates/{node['template_id']}") if node.get("template_id") else {}
     tpl = {k: v for k, v in source.items() if k not in DROP}

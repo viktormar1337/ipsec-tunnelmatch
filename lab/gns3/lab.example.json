@@ -49,7 +49,7 @@
     },
     "opnsense": {
       "enabled": true,
-      "template": "OPNsense",
+      "template": "OPNsense 26.7 (tmlab)",
       "wan_port": {
         "adapter": 1,
         "port": 0

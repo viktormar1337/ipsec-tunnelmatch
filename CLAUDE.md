@@ -40,9 +40,16 @@ vsrx .17 / 10.7, vyos .18 / 10.8, openwrt .19 / 10.9.
 Status:
 - OPNsense 26.1 <-> strongSwan: passed on real images 2026-10-20
   (`lab/gns3/reference/2026-10-20-opnsense-strongswan.md`).
-- pfSense 2.7.2: template prep in progress (`prepare_template.py`, see README).
-- MikroTik CHR, vSRX, VyOS, OpenWrt, IOS-XE, ASA: drivers tested only against simulated
-  consoles. Expect small fixes (prompts, show-command formats) on the first real run.
+- pfSense 2.7.2 <-> strongSwan: passed on real images 2026-10-21
+  (`lab/gns3/reference/2026-10-21-pfsense-strongswan.md`).
+- strongSwan, MikroTik CHR 7.24.5, VyOS rolling, OpenWrt 25.12.6: full mesh passed 2026-10-21
+  (`lab/gns3/reference/2026-10-21-strongswan-mikrotik-vyos-openwrt.md`), with generator changes
+  for MikroTik, OpenWrt, VyOS and strongSwan that are not released yet (see that report).
+- OPNsense 26.7.7 <-> strongSwan: passed 2026-10-22
+  (`lab/gns3/reference/2026-10-22-opnsense-26.7-strongswan.md`).
+- Templates for MikroTik, VyOS, OpenWrt and OPNsense: `python3 lab/gns3/add_templates.py`.
+- vSRX, IOS-XE, ASA: drivers tested only against simulated consoles; no templates on this
+  server yet. Expect small fixes (prompts, show-command formats) on the first real run.
 
 When a run fails: read `lab/gns3/results/latest.md` and the per-node console logs in
 `lab/gns3/results/`, fix the driver in `run.py` (or the generator in `generate.js`), run

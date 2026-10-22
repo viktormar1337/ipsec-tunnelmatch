@@ -1,10 +1,15 @@
 /*
- * Check Point Quantum Security Gateway (Gaia R81.x / R82, managed by a Security Management Server)
- * Rules: Check Point Management API (vpn-community-star, interoperable-device), as documented in
- * the check_point.mgmt Ansible collection 6.9.0, checked 2026-10-21.
+ * Check Point Quantum Security Gateway, Gaia R82 (R82, R82.10, R82.20 take the same config),
+ * managed by a Security Management Server
+ * Rules: Site to Site VPN admin guide R82 ("IPsec and IKE" algorithm lists, "Best
+ * Practices for Quantum Safe Key Exchange and VPN Tunnel Encryption"), checked 2026-10-22, and
+ * the Management API (vpn-community-star, interoperable-device) as documented in the
+ * check_point.mgmt Ansible collection 6.9.0.
  *
- * Phase 1: AES-128/256, 3DES (no GCM in the API), SHA1/SHA2-256/384/512, MD5, DH 1/2/5/14/19/20.
- * Phase 2: AES-128/256, AES-GCM-128/256, 3DES; PFS DH 1/2/5/14-20/24.
+ * R82: phase 1 AES-128/256, AES-GCM-128/256, 3DES, SHA1/SHA-256/384/512, MD5, AES-XCBC,
+ * DH 1/2/5/14/15/16/17/18/19/20/21 (R81.20 had neither GCM in phase 1 nor DH 15/21; R81.x is not covered).
+ * Phase 2: AES-128/256, AES-GCM-128/256, 3DES. PFS: the guide lists 1/2/5/14/19/20; 15 and 21 are flagged.
+ * No AES-192 anywhere. Group 24 is not in the admin guides.
  * The peer is an Interoperable Device with a manual encryption domain; the tunnel is a star
  * community with a custom encryption suite. Route-based uses a numbered VTI in Gaia clish and
  * an empty encryption domain. IKE DPD for third-party peers is not in the API.
@@ -14,7 +19,7 @@
   const { isGcm, spell } = TM;
 
   const N = {
-    p1enc: { aes128: "aes-128", aes256: "aes-256", "3des": "3des" },
+    p1enc: { aes128: "aes-128", aes256: "aes-256", aes128gcm: "aes-gcm-128", aes256gcm: "aes-gcm-256", "3des": "3des" },
     p2enc: { aes128: "aes-128", aes256: "aes-256", aes128gcm: "aes-gcm-128", aes256gcm: "aes-gcm-256", "3des": "3des" },
     int: { sha1: "sha1", sha256: "sha256", sha384: "sha384", sha512: "sha512", md5: "md5" },
     dh: (n) => "group-" + n,
@@ -52,6 +57,10 @@
       m(`add interoperable-device name "${peer}" ip-address "${c.peer.ip}" vpn-settings.vpn-domain-type "manual" vpn-settings.vpn-domain "${grp}"`),
       "",
       "# Star community with a custom encryption suite (the key is entered here, keep it out of shell history)",
+      ...(isGcm(S.p1enc) || [15, 21].includes(S.dh)
+        ? ["# If mgmt_cli rejects the phase 1 AES-GCM or DH 15/21 value, set it in SmartConsole",
+           "# instead (community > Encryption > Custom encryption suite)."]
+        : []),
       m([
         `add vpn-community-star name "${comm}"`,
         `center-gateways.1 "${gw}" satellite-gateways.1 "${peer}"`,
@@ -101,29 +110,34 @@
     if (S.p1life % 60) add("err", `Check Point (site ${k}): the IKE rekey time is set in whole minutes; use a multiple of 60 s.`);
   }
 
-  function notes({ add }) {
+  function notes({ S, add }) {
+    add("info", "Check Point: the output is for R82 gateways (R82, R82.10, R82.20 take the same config). Check Point's recommended version is R82.10 with the latest Jumbo Hotfix take.");
+    add("info", "Check Point R82 best practice for VPN communities: IKEv2 only, custom suite with AES-GCM-128 or stronger, SHA-384, a DH group stronger than 15, PFS on, and Quantum Safe Key Exchange (ML-KEM from R82 Jumbo Hotfix Take 41) when the peer supports it.");
+    if (S.dh < 15 || (S.pfs && S.pfs < 15)) add("info", `Check Point recommends a DH group stronger than 15; group ${S.dh < 15 ? S.dh : S.pfs} is below that.`);
     add("info", "Check Point: DPD toward a third-party peer is not in the management API. For IKEv2, set tunnel_keepalive_method = dpd on the Interoperable Device in GuiDBedit; the interval is fixed by the gateway.");
   }
 
   TM.register({
     id: "checkpoint",
     order: 17,
-    label: "Check Point Quantum (R81 / R82)",
+    label: "Check Point Quantum (R82)",
     short: "Check Point",
     modes: ["policy", "route"],
     narrow: false,
     multiSaNote: true,
     supports: {
-      p1enc: ["aes128", "aes256", "3des"],
+      p1enc: ["aes128", "aes256", "aes128gcm", "aes256gcm", "3des"],
       p1int: ["sha1", "sha256", "sha384", "sha512", "md5"],
-      dh: [2, 5, 14, 19, 20],
+      dh: [2, 5, 14, 15, 19, 20, 21],
       p2enc: ["aes128", "aes256", "aes128gcm", "aes256gcm", "3des"],
       p2int: ["sha1", "sha256", "sha384", "sha512", "md5"],
-      pfs: [0, 2, 5, 14, 15, 19, 20, 24],
+      pfs: [0, 2, 5, 14, 15, 19, 20, 21],
     },
+    verify: { pfs: [15, 21] },
+    verifyNote: "the R82 admin guide lists PFS groups 1, 2, 5, 14, 19 and 20 only; check that your gateway offers it.",
     defaults: { iface: "gw-site", tun: "10" },
     fields: { iface: "Gateway object name", tun: "VTI ID" },
-    hint: "No AES-192. No GCM in IKE (phase 1). The IKE rekey time is in minutes.",
+    hint: "R82 gateways. No AES-192. The IKE rekey time is in minutes.",
     names: (S) => ({
       p1enc: spell(N.p1enc, S.p1enc),
       p1int: spell(N.int, S.p1int),
@@ -137,13 +151,14 @@
     notes,
     generate,
     sources: {
-      status: "Verified 2026-10-21",
-      used: "Management API values for vpn-community-star (phase 1 and 2 algorithms, DH and PFS groups, rekey times and units, encryption method and suite, tunnel granularity, shared secrets) and interoperable-device (manual VPN domain), from the check_point.mgmt collection 6.9.0. Numbered VTI syntax (tunnel ID 1–99, interface vpnt<ID>) from the Gaia admin guide.",
+      status: "Verified 2026-10-22",
+      used: "Supported algorithms for R82 and Check Point's R82 best practices from the Site to Site VPN admin guides. Management API values for vpn-community-star (phase 1 and 2 algorithms, DH and PFS groups, rekey times and units, encryption method and suite, tunnel granularity, shared secrets) and interoperable-device (manual VPN domain), from the check_point.mgmt collection 6.9.0. Numbered VTI syntax (tunnel ID 1–99, interface vpnt<ID>) from the Gaia admin guide.",
       links: [
+        ["Check Point R82 Site to Site VPN: IPsec and IKE", "https://sc1.checkpoint.com/documents/R82/WebAdminGuides/EN/CP_R82_SitetoSiteVPN_AdminGuide/Content/Topics-VPNSG/IPsec-and-IKE.htm"],
         ["Ansible check_point.mgmt: cp_mgmt_vpn_community_star", "https://docs.ansible.com/projects/ansible/latest/collections/check_point/mgmt/cp_mgmt_vpn_community_star_module.html"],
         ["Ansible check_point.mgmt: cp_mgmt_interoperable_device", "https://docs.ansible.com/projects/ansible/latest/collections/check_point/mgmt/cp_mgmt_interoperable_device_module.html"],
         ["Check Point R82 Gaia: VPN Tunnel Interfaces", "https://sc1.checkpoint.com/documents/R82/WebAdminGuides/EN/CP_R82_Gaia_AdminGuide/Content/Topics-GAG/VPN-Tunnel-Interfaces.htm"],
-        ["Check Point R82 Site to Site VPN guide", "https://sc1.checkpoint.com/documents/R82/WebAdminGuides/EN/CP_R82_SitetoSiteVPN_AdminGuide/Content/Topics-VPNSG/Quantum-Safe-Key-Exchange.htm"],
+        ["Check Point R82: Best Practices for Quantum Safe Key Exchange and VPN Tunnel Encryption", "https://sc1.checkpoint.com/documents/R82/WebAdminGuides/EN/CP_R82_SitetoSiteVPN_AdminGuide/Content/Topics-VPNSG/Quantum-Safe-Key-Exchange.htm"],
       ],
     },
   });

@@ -36,7 +36,7 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 | IPFire | Net-to-Net field values with the stored setting names | Syntax reference |
 | HPE Aruba gateway (AOS 8 / AOS 10) | isakmp policy, transform-set, ipsec-map per subnet pair | Verified |
 | Ubiquiti UniFi gateway | Manual IPsec field values (route- or policy-based) | Syntax reference |
-| Check Point Quantum (R81 / R82) | `mgmt_cli` commands (Interoperable Device, star community, custom suite) and Gaia VTI | Verified |
+| Check Point Quantum (R82) | `mgmt_cli` commands (Interoperable Device, star community, custom suite) and Gaia VTI | Verified |
 
 "Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper, MikroTik, VyOS, OpenWrt and Sophos 2026-10-20; Aruba and Check Point 2026-10-21). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
 

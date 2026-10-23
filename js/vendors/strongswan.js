@@ -32,6 +32,7 @@
         esp_proposals = ${espProposal(S)}
         rekey_time = ${S.p2life}s${S.p2kb ? `\n        rekey_bytes = ${S.p2kb * 1024}` : ""}
         start_action = trap|start
+        close_action = start
         dpd_action = restart${route ? `\n        if_id_in = ${ifid}\n        if_id_out = ${ifid}` : ""}
       }`).join("\n");
 
@@ -110,7 +111,7 @@ secrets {
     generate,
     sources: {
       status: "Syntax reference",
-      used: "swanctl.conf keys: proposals, esp_proposals, local_ts/remote_ts, rekey_time/rekey_bytes, dpd_delay, dpd_action, start_action, if_id_in/if_id_out.",
+      used: "swanctl.conf keys: proposals, esp_proposals, local_ts/remote_ts, rekey_time/rekey_bytes, dpd_delay, dpd_action, start_action, close_action (start: re-initiate when the peer deletes the SA, e.g. after both ends initiated at once), if_id_in/if_id_out.",
       links: [
         ["strongSwan: swanctl.conf (latest)", "https://docs.strongswan.org/docs/latest/swanctl/swanctlConf.html"],
       ],

@@ -45,6 +45,7 @@
       `${ike} key-exchange 'ikev2'`,
       `${ike} lifetime '${S.p1life}'`,
       `${ike} dead-peer-detection action 'restart'`,
+      `${ike} close-action 'start'`,
       `${ike} dead-peer-detection interval '${S.dpdInt}'`,
       `${ike} dead-peer-detection timeout '${S.dpdInt * (S.dpdRetry + 1)}'`,
       `${ike} proposal 1 encryption '${N.enc[S.p1enc]}'`,
@@ -121,7 +122,7 @@
     proposals,
     sources: {
       status: "Verified 2026-10-20",
-      used: "CLI value lists from vyos-1x (encryption, hash, prf, dh-group 1–35, pfs, lifetimes 30–86400 s, DPD 2–86400 s), the proposal builder that always writes encryption-hash[-prf][-dh], site-to-site peer syntax (authentication, local/remote-id, tunnel prefixes, VTI bind) and the SNAT exclude advice.",
+      used: "ike-group close-action (start: when both ends initiate, strongSwan-based peers may delete the duplicate IKE_SA and the other side must re-initiate; seen in the GNS3 lab with OpenWrt), CLI value lists from vyos-1x (encryption, hash, prf, dh-group 1–35, pfs, lifetimes 30–86400 s, DPD 2–86400 s), the proposal builder that always writes encryption-hash[-prf][-dh], site-to-site peer syntax (authentication, local/remote-id, tunnel prefixes, VTI bind) and the SNAT exclude advice.",
       links: [
         ["VyOS docs: IPsec site-to-site", "https://docs.vyos.io/en/latest/configuration/vpn/ipsec.html"],
         ["vyos-1x: vpn_ipsec.xml.in (CLI definitions)", "https://github.com/vyos/vyos-1x/blob/current/interface-definitions/vpn_ipsec.xml.in"],

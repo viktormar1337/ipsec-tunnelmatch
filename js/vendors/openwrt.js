@@ -91,12 +91,21 @@
       "uci set firewall.@nat[-1].proto='all'",
       "uci set firewall.@nat[-1].target='ACCEPT'"
     ));
-    L.push("uci commit firewall", "/etc/init.d/firewall restart", "/etc/init.d/swanctl restart");
+    L.push(
+      "uci commit firewall",
+      "/etc/init.d/firewall restart",
+      "# strongswan-full also installs the legacy ipsec service; only one of them may run charon",
+      "[ -x /etc/init.d/ipsec ] && { /etc/init.d/ipsec stop; /etc/init.d/ipsec disable; }",
+      "# a charon, or its swanctl --load-all child, left over from both services can hold UDP 500/4500",
+      "killall -q -9 charon swanctl",
+      "/etc/init.d/swanctl enable",
+      "/etc/init.d/swanctl restart",
+    );
     return L.join("\n");
   }
 
   function notes({ add }) {
-    add("info", "OpenWrt: needs the strongswan-full package (apk add strongswan-full on 25.x, opkg install strongswan-full on 24.x). DPD retries follow strongSwan's global retransmission settings.");
+    add("info", "OpenWrt: needs the strongswan-full package, and kmod-crypto-seqiv for AES-GCM in phase 2, which strongswan-full does not pull in (without it the kernel refuses the ESP SA: \"unable to initialize cryptographic operations\"): apk add strongswan-full kmod-crypto-seqiv on 25.x, opkg install strongswan-full kmod-crypto-seqiv on 24.x. DPD retries follow strongSwan's global retransmission settings.");
   }
 
   TM.register({
@@ -116,7 +125,7 @@
     },
     defaults: {},
     fields: {},
-    hint: "Generated as UCI commands for /etc/config/ipsec (read by /etc/init.d/swanctl) and the firewall.",
+    hint: "Generated as UCI commands for /etc/config/ipsec (read by /etc/init.d/swanctl) and the firewall. The legacy ipsec service, which strongswan-full also enables, is stopped and disabled: both start charon from the same config, and a charon or swanctl process left over from the two can keep UDP 500/4500, so they are killed before swanctl restarts (this briefly drops any running IPsec tunnels on the router).",
     names: (S) => ({
       p1enc: spell(N.enc, S.p1enc),
       p1int: isGcm(S.p1enc) ? `prf${spell(N.hash, S.p1int)} (no hash with GCM)` : `${spell(N.hash, S.p1int)}, prf${spell(N.hash, S.p1int)}`,

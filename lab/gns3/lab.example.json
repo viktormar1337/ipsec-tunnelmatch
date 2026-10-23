@@ -171,6 +171,12 @@
         "port": 0
       },
       "wan_if": "ethernet1/1",
+      "lan_port": {
+        "adapter": 2,
+        "port": 0
+      },
+      "lan_if": "ethernet1/2",
+      "lan_host": "10.10.0.10",
       "wan_ip": "203.0.113.20",
       "lan": "10.10.0.0/24",
       "lan_ip": "10.10.0.1",

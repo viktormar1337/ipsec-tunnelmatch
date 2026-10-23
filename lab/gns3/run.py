@@ -1150,7 +1150,11 @@ class PanOs(Driver):
             self.errors.append("commit did not complete: " + out.strip()[-300:])
         self.run("exit", 60)
 
+    host = None  # VpcsHost on the LAN interface (lan_host), set by main()
+
     def ping(self, src, dst):
+        if self.host and src == self.node.get("lan_host"):
+            return self.host.ping(src, dst)
         out = self.run(f"ping source {src} count 5 host {dst}", 90)
         # 12.2 rejects this without logical-router, and with it looks for the Advanced Routing
         # namespace ("Cannot open network namespace"), which the legacy virtual router lacks
@@ -1166,6 +1170,31 @@ class PanOs(Driver):
                 c = parse_panos_flow(self.run(f"show vpn flow tunnel-id {tid}", 60))
                 sa["counters"] = {k: sa["counters"].get(k, 0) + c[k] for k in ("encaps", "decaps")}
         return sa
+
+
+class VpcsHost(Driver):
+    """A GNS3 VPCS on a node's LAN switch, for platforms that cannot ping from their own LAN
+    address (PAN-OS 12.2 with the legacy virtual router). Pings cross the firewall like real traffic."""
+
+    prompt = r"^[\w.-]+> ?$"
+
+    def setup(self, ip, prefix, gateway, timeout=120):
+        end = time.time() + timeout
+        while True:
+            self.con.sendline()
+            try:
+                self.con.expect([self.prompt], 10)
+                break
+            except TimeoutError:
+                if time.time() > end:
+                    raise TimeoutError("VPCS gave no prompt")
+        out = self.run(f"ip {ip}/{prefix} {gateway}", 30)  # VPCS checks for a duplicate address first
+        if ip not in out:
+            raise RuntimeError(f"VPCS did not take the address: {out.strip()[:200]}")
+
+    def ping(self, src, dst):
+        out = self.run(f"ping {dst} -c 5", 60)
+        return len(re.findall(r"bytes from " + re.escape(dst), out)), 5
 
 
 DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx, "vyos": Vyos, "openwrt": OpenWrt, "panos": PanOs}
@@ -1202,9 +1231,9 @@ def test_pair(pair, drivers):
                 if got is None or got[0] >= 3:
                     break
                 time.sleep(5)
-            if got is None:  # the device cannot ping from its LAN address; the peer's ping and the SA counters cover it
+            if got is None:  # the device cannot ping from this address; the peer's ping and the SA counters cover it
                 check(True, f"Ping {NAMES[pair[side]]} {src} → {dst}: skipped, not possible from this device's CLI")
-                break
+                continue
             check(got[0] > 0, f"Ping {NAMES[pair[side]]} {src} → {dst}: {got[0]}/{got[1]} replies")
     for side, other in (("a", "b"), ("b", "a")):
         d = drivers[pair[side]]
@@ -1372,6 +1401,7 @@ def main():
                      + f"\nTo leave {nid} out for now: --nodes " + ",".join(k for k in ids if k != nid))
         templates[nid] = t
     switch = g.template(ttype="ethernet_switch")
+    vpcs = g.template(ttype="vpcs")
     log("Templates: " + ", ".join(f"{nid}={templates[nid]['name']}" for nid in ids))
     if opt.dry_run:
         log("Dry run: plan generated, server and templates found.")
@@ -1399,6 +1429,9 @@ def main():
             if n.get("lan_port"):
                 lan = g.add_node(pid, switch["template_id"], f"TM-LAN-{nid.upper()}", x * 2, y * 2, compute)
                 g.add_link(pid, (made[nid]["node_id"], n["lan_port"]["adapter"], n["lan_port"]["port"]), (lan["node_id"], 0, 0))
+                if n.get("lan_host"):
+                    host = g.add_node(pid, vpcs["template_id"], f"TM-HOST-{nid.upper()}", x * 2 + 150, y * 2, compute)
+                    g.add_link(pid, (host["node_id"], 0, 0), (lan["node_id"], 0, 1))
         log("Starting nodes")
         g.start_all(pid)
     else:
@@ -1432,6 +1465,12 @@ def main():
             if not opt.reuse:
                 log(f"{NAMES[nid]}: applying config")
                 d.apply()
+            if n.get("lan_host"):
+                hname = f"TM-HOST-{nid.upper()}"
+                hhost, hport, _ = g.console(pid, by_name[hname]["node_id"])
+                d.host = VpcsHost(n, plan, Console(hhost, hport, os.path.join(RESULTS, f"{nid}-host.log"), secrets))
+                d.host.setup(n["lan_host"], n["lan"].split("/")[1], n["lan_ip"])
+                log(f"{NAMES[nid]}: LAN host {hname} at {n['lan_host']}")
             nr["status"] = "configured" if not d.errors else "configured with errors"
         except Exception as e:  # keep going: the other nodes can still be tested
             d.errors.append(f"{type(e).__name__}: {e}")

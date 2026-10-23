@@ -36,3 +36,31 @@ The report below is from a `--reuse` recheck of the tunnel built by the full run
 - ✅ TM-PANOS: IKE AES-GCM-256 / 20
 - ✅ TM-PANOS: ESP AES-GCM-256 / 20
 - ✅ TM-PANOS: packets out 9, in 9
+
+
+## Follow-up: ping from a host on the LAN interface
+
+PAN-OS 12.2 with Advanced Routing off (`show system info`: `advanced-routing: off`) still only accepts `ping` with `logical-router`, and then fails with `Cannot open network namespace "ns1"`, so the firewall cannot ping from its own LAN address. The lab now puts the PAN-OS LAN on `ethernet1/2` (10.10.0.1/24) with a GNS3 VPCS host at 10.10.0.10 behind it; the PAN-OS-side pings run on that host and cross the firewall as forwarded traffic (TTL 63 at the far end). Rerun with that setup, 2026-10-23 21:48:
+
+| | Tunnel | Profile | Failed checks |
+|---|---|---|---|
+| ✅ | TM-STRONGSWAN ↔ TM-PANOS | AES-256-GCM / SHA-384 / group 20 · ESP AES-256-GCM · PFS 20 | — |
+
+## Nodes
+
+- ✅ **TM-STRONGSWAN** configured
+- ✅ **TM-PANOS** configured
+
+### ✅ TM-STRONGSWAN ↔ TM-PANOS
+
+- ✅ Tool reports no crypto errors for this pair
+- ✅ Ping TM-STRONGSWAN 10.4.0.1 → 10.10.0.10: 4/5 replies
+- ✅ Ping TM-PANOS 10.10.0.10 → 10.4.0.1: 5/5 replies
+- ✅ TM-STRONGSWAN: IKE SA state ESTABLISHED
+- ✅ TM-STRONGSWAN: IKE AES-GCM-256 / SHA384 / 20
+- ✅ TM-STRONGSWAN: ESP AES-GCM-256
+- ✅ TM-STRONGSWAN: packets out 9, in 9
+- ✅ TM-PANOS: IKE SA state ESTABLISHED
+- ✅ TM-PANOS: IKE AES-GCM-256 / 20
+- ✅ TM-PANOS: ESP AES-GCM-256 / 20
+- ✅ TM-PANOS: packets out 9, in 9

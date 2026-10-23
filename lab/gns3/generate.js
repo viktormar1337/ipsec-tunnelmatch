@@ -62,11 +62,12 @@ function args() {
 /* The node's networks: its "lan", then the same addresses with the third octet 100, 200. */
 function lansOf(n, count) {
   const third = (addr, k) => addr.replace(/^(\d+\.\d+)\.\d+\./, `$1.${100 * k}.`);
-  const out = [{ net: n.lan, ip: n.lan_ip }];
+  // lan_host: a host on the LAN interface (PAN-OS) that pings instead of the device itself
+  const out = [{ net: n.lan, ip: n.lan_ip, ping: n.lan_host || n.lan_ip }];
   for (let k = 1; k < count; k++) {
     const net = third(n.lan, k);
     if (!TM.parseCidr(net) || +n.lan.split("/")[1] < 24) throw new Error(`--lans: cannot derive a second network from ${n.lan} (needs a /24 or smaller)`);
-    out.push({ net, ip: third(n.lan_ip, k) });
+    out.push({ net, ip: third(n.lan_ip, k), ping: third(n.lan_ip, k) });
   }
   return out;
 }
@@ -337,15 +338,20 @@ function mergeVsrx(node, tunnels) {
 }
 
 /* PAN-OS: the factory default config is a virtual wire on ethernet1/1-1/2 with zones trust and
-   untrust and rule1; that is removed first. Then the WAN address on ethernet1/1, the LAN address
-   on loopback.1 (/32: the proxy-IDs carry the /24), zones untrust/trust/vpn, an allow-all rule for the lab, a management profile
-   that answers ping, and the tool's set commands (route-based, one tunnel unit and proxy-IDs per
-   peer, static routes in the default virtual router). */
+   untrust and rule1; that is removed first. Then the WAN address on ethernet1/1, the LAN on
+   ethernet1/2 (lan_if, with a host behind it that pings; PAN-OS 12.2 cannot ping from its own
+   address with the legacy virtual router) or else on loopback.1 (/32: the proxy-IDs carry the
+   /24), further networks on loopback.2 and up, zones untrust/trust/vpn, an allow-all rule for
+   the lab, a management profile that answers ping, and the tool's set commands (route-based,
+   one tunnel unit and proxy-IDs per peer, static routes in the default virtual router). */
 function mergePanos(node, tunnels) {
   const strip = (l) => l.replace(/\s+#.*$/, "").trim();
   const tool = tunnels.flatMap((t) => t.text.replace(/<PSK>/g, t.psk).split("\n").map(strip).filter((l) => l && !l.startsWith("#")));
   const units = [...new Set(tool.map((l) => (l.match(/^set network interface tunnel units (tunnel\.\d+)/) || [])[1]).filter(Boolean))];
   const loops = node.lans.map((l, i) => ({ unit: `loopback.${i + 1}`, ip: l.ip }));
+  const lanEth = node.lan_if ? { unit: node.lan_if, ip: node.lan_ip } : null;
+  if (lanEth) loops.shift();
+  const trust = [...(lanEth ? [lanEth.unit] : []), ...loops.map((l) => l.unit)];
   const lines = [
     "delete rulebase security rules rule1",
     "delete zone trust",
@@ -357,12 +363,14 @@ function mergePanos(node, tunnels) {
     "set network profiles interface-management-profile TM-PING ping yes",
     `set network interface ethernet ${node.wan_if} layer3 ip ${node.wan_ip}/${node.prefix}`,
     `set network interface ethernet ${node.wan_if} layer3 interface-management-profile TM-PING`,
+    ...(lanEth ? [`set network interface ethernet ${lanEth.unit} layer3 ip ${lanEth.ip}/${node.lan.split("/")[1]}`,
+      `set network interface ethernet ${lanEth.unit} layer3 interface-management-profile TM-PING`] : []),
     ...loops.flatMap((l) => [`set network interface loopback units ${l.unit} ip ${l.ip}/32`,
       `set network interface loopback units ${l.unit} interface-management-profile TM-PING`]),
     ...units.map((u) => `set network interface tunnel units ${u} interface-management-profile TM-PING`),
-    `set network virtual-router default interface [ ${[node.wan_if, ...loops.map((l) => l.unit), ...units].join(" ")} ]`,
+    `set network virtual-router default interface [ ${[node.wan_if, ...trust, ...units].join(" ")} ]`,
     `set zone untrust network layer3 ${node.wan_if}`,
-    `set zone trust network layer3 ${loops.length > 1 ? `[ ${loops.map((l) => l.unit).join(" ")} ]` : loops[0].unit}`,
+    `set zone trust network layer3 ${trust.length > 1 ? `[ ${trust.join(" ")} ]` : trust[0]}`,
     ...(units.length ? [`set zone vpn network layer3 [ ${units.join(" ")} ]`] : []),
     "set rulebase security rules TM-LAB from any to any source any destination any application any service any action allow",
     ...(node.extra_config || []),
@@ -491,8 +499,8 @@ function main() {
       },
       // one ping per subnet pair and direction; each pair is its own SA
       pings: {
-        a: cfg.nodes[a].lans.flatMap((la) => cfg.nodes[b].lans.map((lb) => ({ src: la.ip, dst: lb.ip }))),
-        b: cfg.nodes[b].lans.flatMap((lb) => cfg.nodes[a].lans.map((la) => ({ src: lb.ip, dst: la.ip }))),
+        a: cfg.nodes[a].lans.flatMap((la) => cfg.nodes[b].lans.map((lb) => ({ src: la.ping, dst: lb.ping }))),
+        b: cfg.nodes[b].lans.flatMap((lb) => cfg.nodes[a].lans.map((la) => ({ src: lb.ping, dst: la.ping }))),
       },
       subnetPairs: cfg.nodes[a].lans.length * cfg.nodes[b].lans.length,
       peers: { a: cfg.nodes[a].wan_ip, b: cfg.nodes[b].wan_ip },

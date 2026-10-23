@@ -44,13 +44,13 @@ Status:
   (`lab/gns3/reference/2026-10-21-pfsense-strongswan.md`).
 - strongSwan, MikroTik CHR 7.24.5, VyOS rolling, OpenWrt 25.12.6: full mesh passed 2026-10-21
   (`lab/gns3/reference/2026-10-21-strongswan-mikrotik-vyos-openwrt.md`), with generator changes
-  for MikroTik, OpenWrt, VyOS and strongSwan that are not released yet (see that report).
+  for MikroTik, OpenWrt, VyOS and strongSwan (see that report), released 2026-10-23.
 - OPNsense 26.7.7 <-> strongSwan: passed 2026-10-22
   (`lab/gns3/reference/2026-10-22-opnsense-26.7-strongswan.md`).
 - Templates for MikroTik, VyOS, OpenWrt and OPNsense: `python3 lab/gns3/add_templates.py`.
 - PAN-OS 12.2.3 (VM-Series, unlicensed) <-> strongSwan 6.1.0: passed 2026-10-23
   (`lab/gns3/reference/2026-10-23-panos-strongswan.md`), with a fix to the PAN-OS generator
-  (`crypto-profiles` path) that is not released yet. Template "PA-VM" from the user's own qcow2
+  (`crypto-profiles` path), released 2026-10-23. Template "PA-VM" from the user's own qcow2
   (16 GB RAM, 2 vCPU, QEMU option `-cpu host`, adapter 1 = ethernet1/1).
 - The strongSwan image is built from Debian forky (strongSwan 6.1.0). OPNsense, pfSense, MikroTik,
   VyOS, OpenWrt and PAN-OS each passed against it 2026-10-23

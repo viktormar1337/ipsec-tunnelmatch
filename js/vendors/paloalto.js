@@ -22,8 +22,8 @@
     const n = c.name;
     const tun = c.me.tun || "tunnel.10";
     const wan = c.me.iface || "ethernet1/1";
-    const ike = `set network ike crypto-profile ike-crypto-profiles IKE-${n}`;
-    const ips = `set network ike crypto-profile ipsec-crypto-profiles IPSEC-${n}`;
+    const ike = `set network ike crypto-profiles ike-crypto-profiles IKE-${n}`;
+    const ips = `set network ike crypto-profiles ipsec-crypto-profiles IPSEC-${n}`;
     const gw = `set network ike gateway GW-${n}`;
     const tn = `set network tunnel ipsec TUN-${n}`;
 

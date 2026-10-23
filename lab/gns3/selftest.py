@@ -143,6 +143,36 @@ JUNOS_IPSEC = """  ID: 500001 Virtual-system: root, VPN Name: VPN-STRONGSWAN
     PFS (group): DH-group-20
 """
 
+# PAN-OS output in the layout of published samples (packetswitch.co.uk, majornetwork.net);
+# not captured from a device. The GCM row wraps the way a narrow terminal shows it.
+PANOS_IKE = """There is no IKEv1 phase-1 SA found.
+
+IKEv2 SAs
+Gateway ID      Peer-Address           Gateway Name           Role SN       Algorithm          Established     Expiration      Xt Child  ST
+----------      ------------           ------------           ---- --       ---------          -----------     ----------      -- -----  --
+1               203.0.113.14           GW-STRONGSWAN
+Init 40       PSK/DH20/AES256-GCM16/COMBINED Oct.23 07:47:31 Oct.23 15:47:31 0  1      Established
+2               203.0.113.16           GW-MIKROTIK            Resp 41       PSK/DH20/A256/SHA384 Oct.23 07:48:02 Oct.23 15:48:02 0  1      Established
+
+IKEv2 IPSec Child SAs
+Show IKEv2 SA: Total 2 gateways found. 2 ike sa found.
+"""
+
+PANOS_IPSEC = """GwID/client IP  TnID   Peer-Address           Tunnel(Gateway)                                Algorithm          SPI(in)  SPI(out) life(Sec/KB)             remain-time(Sec)
+--------------  ----   ------------           ---------------                                ---------          -------  -------- ------------             ----------------
+1               4      203.0.113.14           TUN-STRONGSWAN:PID-1(GW-STRONGSWAN)            ESP/G256/ /DH20    D6899B03 1BF46826 3600/Unlimited           3517
+2               5      203.0.113.16           TUN-MIKROTIK:PID-1(GW-MIKROTIK)                ESP/A256/SHA256/DH14 C0FFEE01 C0FFEE02 3600/Unlimited         3530
+
+Show IPSec SA: Total 2 tunnels found. 2 ipsec sa found.
+"""
+
+PANOS_FLOW = """tunnel  TUN-STRONGSWAN:PID-1
+        id:                     4
+        type:                   IPSec
+        encap packets:          25
+        decap packets:          24
+"""
+
 # both ends initiated at once: a CONNECTING duplicate listed before the established IKE_SA
 SWANCTL_TWO_SAS = (
     "list-sa event {opnsense {uniqueid=2 version=2 state=CONNECTING local-host=203.0.113.14 local-port=500 "
@@ -184,6 +214,17 @@ def test_parsers():
     check(r and r["ike"]["state"] == "ESTABLISHED" and r["esp"] == {"encr": "AES-GCM-256", "integ": None}
           and r["counters"] == {"encaps": 5, "decaps": 5}, f"swanctl: established IKE_SA preferred over a CONNECTING duplicate: {r}")
     check(run.parse_swanctl_raw(SWANCTL_TWO_SAS, "203.0.113.99") is None, "swanctl: unknown peer gives None")
+    r = run.parse_panos(PANOS_IKE, PANOS_IPSEC, "203.0.113.14")
+    check(r == {"ike": {"state": "ESTABLISHED", "dh": 20, "encr": "AES-GCM-256", "integ": None},
+                "esp": {"encr": "AES-GCM-256", "integ": None, "pfs": 20}, "counters": {}, "tunnels": [4]},
+          f"PAN-OS ike-sa / ipsec-sa (GCM, wrapped row): {r}")
+    r = run.parse_panos(PANOS_IKE, PANOS_IPSEC, "203.0.113.16")
+    check(r and r["ike"] == {"state": "ESTABLISHED", "dh": 20, "encr": "AES-CBC-256", "integ": "SHA384"}
+          and r["esp"] == {"encr": "AES-CBC-256", "integ": "SHA256", "pfs": 14} and r["tunnels"] == [5],
+          f"PAN-OS ike-sa / ipsec-sa (CBC): {r}")
+    check(run.parse_panos(PANOS_IKE, PANOS_IPSEC, "203.0.113.99") is None, "PAN-OS: unknown peer gives None")
+    check(run.parse_panos_flow(PANOS_FLOW) == {"encaps": 25, "decaps": 24}, "PAN-OS vpn flow counters")
+    check(run.ping_ok("5 packets transmitted, 5 received, 0% packet loss, time 4006ms") == (5, 5), "PAN-OS ping")
     check(run.ping_ok("  SEQ HOST    SIZE TTL TIME\n    sent=5 received=4 packet-loss=20% min-rtt=1ms") == (4, 5), "RouterOS ping")
     check(run.ping_ok("Success rate is 80 percent (4/5), round-trip min/avg/max = 1/2/4 ms") == (4, 5), "Cisco ping")
     check(run.ping_ok("5 packets transmitted, 5 packets received, 0.0% packet loss") == (5, 5), "FreeBSD ping")

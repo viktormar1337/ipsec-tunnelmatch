@@ -162,6 +162,21 @@
       "lan": "10.9.0.0/24",
       "lan_ip": "10.9.0.1",
       "boot_timeout": 300
+    },
+    "panos": {
+      "enabled": true,
+      "template": "PA-VM",
+      "wan_port": {
+        "adapter": 1,
+        "port": 0
+      },
+      "wan_if": "ethernet1/1",
+      "wan_ip": "203.0.113.20",
+      "lan": "10.10.0.0/24",
+      "lan_ip": "10.10.0.1",
+      "password": "TMlab-Admin-1",
+      "extra_config": [],
+      "boot_timeout": 1500
     }
   }
 }

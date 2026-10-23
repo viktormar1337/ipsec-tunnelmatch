@@ -37,6 +37,7 @@ const KINDS = {
   vsrx: { vendor: "juniper", name: "VSRX" },
   vyos: { vendor: "vyos", name: "VYOS" },
   openwrt: { vendor: "openwrt", name: "OPENWRT" },
+  panos: { vendor: "paloalto", name: "PANOS" },
 };
 
 /* What the devices report, normalised the same way run.py normalises their output. */
@@ -68,7 +69,9 @@ function stateFor(cfg, a, b, crypto_) {
       mode: v.modes.includes("policy") ? "policy" : v.modes[0],
     }, id === "asa" ? { iface: "outside" } : {}, id === "iosxe" || id === "vyos" ? { iface: n.wan_if } : {},
     // one st0 unit per peer on Junos
-    id === "vsrx" ? { iface: `${n.wan_if}.0`, tun: `st0.${order.indexOf(other) + 1}` } : {});
+    id === "vsrx" ? { iface: `${n.wan_if}.0`, tun: `st0.${order.indexOf(other) + 1}` } : {},
+    // and one tunnel unit per peer on PAN-OS
+    id === "panos" ? { iface: n.wan_if, tun: `tunnel.${order.indexOf(other) + 1}` } : {});
   };
   const s = JSON.parse(JSON.stringify(Object.assign({}, BASE, { tunnelName: `${KINDS[a].name}-${KINDS[b].name}` }, crypto_ || {})));
   s.A = side(a, b);
@@ -315,6 +318,40 @@ function mergeVsrx(node, tunnels) {
   return { lines };
 }
 
+/* PAN-OS: the factory default config is a virtual wire on ethernet1/1-1/2 with zones trust and
+   untrust and rule1; that is removed first. Then the WAN address on ethernet1/1, the LAN address
+   on loopback.1 (/32: the proxy-IDs carry the /24), zones untrust/trust/vpn, an allow-all rule for the lab, a management profile
+   that answers ping, and the tool's set commands (route-based, one tunnel unit and proxy-IDs per
+   peer, static routes in the default virtual router). */
+function mergePanos(node, tunnels) {
+  const strip = (l) => l.replace(/\s+#.*$/, "").trim();
+  const tool = tunnels.flatMap((t) => t.text.replace(/<PSK>/g, t.psk).split("\n").map(strip).filter((l) => l && !l.startsWith("#")));
+  const units = [...new Set(tool.map((l) => (l.match(/^set network interface tunnel units (tunnel\.\d+)/) || [])[1]).filter(Boolean))];
+  const lines = [
+    "delete rulebase security rules rule1",
+    "delete zone trust",
+    "delete zone untrust",
+    "delete network virtual-wire default-vwire",
+    "delete network interface ethernet ethernet1/1",
+    "delete network interface ethernet ethernet1/2",
+    "set deviceconfig system hostname TM-PANOS",
+    "set network profiles interface-management-profile TM-PING ping yes",
+    `set network interface ethernet ${node.wan_if} layer3 ip ${node.wan_ip}/${node.prefix}`,
+    `set network interface ethernet ${node.wan_if} layer3 interface-management-profile TM-PING`,
+    `set network interface loopback units loopback.1 ip ${node.lan_ip}/32`,
+    "set network interface loopback units loopback.1 interface-management-profile TM-PING",
+    ...units.map((u) => `set network interface tunnel units ${u} interface-management-profile TM-PING`),
+    `set network virtual-router default interface [ ${[node.wan_if, "loopback.1", ...units].join(" ")} ]`,
+    `set zone untrust network layer3 ${node.wan_if}`,
+    "set zone trust network layer3 loopback.1",
+    ...(units.length ? [`set zone vpn network layer3 [ ${units.join(" ")} ]`] : []),
+    "set rulebase security rules TM-LAB from any to any source any destination any application any service any action allow",
+    ...(node.extra_config || []),
+    ...tool,
+  ];
+  return { lines };
+}
+
 /* VyOS: set commands from the tool (trailing "# ..." notes removed) after the lab's interfaces;
    the LAN address sits on a dummy interface. */
 function mergeVyos(node, tunnels) {
@@ -437,7 +474,7 @@ function main() {
     });
   }
 
-  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx, vyos: mergeVyos, openwrt: mergeOpenwrt };
+  const merge = { iosxe: mergeIosxe, asa: mergeAsa, opnsense: mergeOpnsense, pfsense: mergePfsense, strongswan: mergeStrongswan, mikrotik: mergeMikrotik, vsrx: mergeVsrx, vyos: mergeVyos, openwrt: mergeOpenwrt, panos: mergePanos };
   const planNodes = {};
   ids.forEach((id) => {
     const n = nodes[id];

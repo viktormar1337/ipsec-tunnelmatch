@@ -35,7 +35,7 @@ python3 lab/gns3/run.py --nodes strongswan,opnsense --keep
 
 Node addressing (WAN 203.0.113.x, LAN 10.x.0.0/24): iosxe .11 / 10.1, asa .12 / 10.2,
 opnsense .13 / 10.3, strongswan .14 / 10.4, pfsense .15 / 10.5, mikrotik .16 / 10.6,
-vsrx .17 / 10.7, vyos .18 / 10.8, openwrt .19 / 10.9.
+vsrx .17 / 10.7, vyos .18 / 10.8, openwrt .19 / 10.9, panos .20 / 10.10.
 
 Status:
 - OPNsense 26.1 <-> strongSwan: passed on real images 2026-10-20
@@ -48,6 +48,8 @@ Status:
 - OPNsense 26.7.7 <-> strongSwan: passed 2026-10-22
   (`lab/gns3/reference/2026-10-22-opnsense-26.7-strongswan.md`).
 - Templates for MikroTik, VyOS, OpenWrt and OPNsense: `python3 lab/gns3/add_templates.py`.
+- PAN-OS (VM-Series, unlicensed): driver tested only against a simulated console; template
+  "PA-VM" from the user's own qcow2 (6.5 GB RAM, 2 vCPU, adapter 1 = ethernet1/1).
 - vSRX, IOS-XE, ASA: drivers tested only against simulated consoles; no templates on this
   server yet. Expect small fixes (prompts, show-command formats) on the first real run.
 

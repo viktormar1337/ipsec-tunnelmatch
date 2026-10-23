@@ -31,8 +31,8 @@ from urllib.parse import quote, urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 
-NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX", "vyos": "TM-VYOS", "openwrt": "TM-OPENWRT"}
-LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0), "vyos": (500, 0), "openwrt": (-500, 250)}
+NAMES = {"iosxe": "TM-IOSXE", "asa": "TM-ASA", "opnsense": "TM-OPNSENSE", "pfsense": "TM-PFSENSE", "strongswan": "TM-STRONGSWAN", "mikrotik": "TM-MIKROTIK", "vsrx": "TM-VSRX", "vyos": "TM-VYOS", "openwrt": "TM-OPENWRT", "panos": "TM-PANOS"}
+LAYOUT = {"iosxe": (-300, -150), "asa": (300, -150), "opnsense": (300, 150), "pfsense": (0, 250), "strongswan": (-300, 150), "mikrotik": (0, -250), "vsrx": (-500, 0), "vyos": (500, 0), "openwrt": (-500, 250), "panos": (500, 250)}
 
 
 def log(msg):
@@ -514,6 +514,65 @@ def parse_junos(ike_text, ipsec_text, peer):
             esp["pfs"] = int(pfs)
         break
     return {"ike": ike, "esp": esp, "counters": {}}
+
+
+PANOS_ENC = {"GCM": "AES-GCM", "CBC": "AES-CBC"}
+
+
+def _panos_enc(tok):
+    """'AES256-GCM16', 'AES256', 'A256', 'aes-256-cbc' (IKE) or 'G256', 'A256' (ESP) -> AES-GCM-256 / AES-CBC-256."""
+    t = tok.upper()
+    if "3DES" in t:
+        return "3DES"
+    m = re.search(r"(\d{3})", t)
+    if not m:
+        return tok
+    gcm = "GCM" in t or t.startswith("G")
+    return f"{'AES-GCM' if gcm else 'AES-CBC'}-{m.group(1)}"
+
+
+def _panos_hash(tok):
+    t = (tok or "").strip().upper().replace("-", "")
+    if not t or t in ("COMBINED", "NONE"):
+        return None
+    m = re.match(r"SHA(\d+)", t)
+    if m:
+        return "SHA1" if m.group(1) in ("1", "96") else "SHA" + m.group(1)
+    return "MD5" if t.startswith("MD5") else tok
+
+
+def parse_panos(ike_text, ipsec_text, peer):
+    """`show vpn ike-sa` and `show vpn ipsec-sa`. IKEv2 rows hold an Algorithm column like
+    'PSK/DH20/AES256-GCM16/COMBINED' (or 'PSK/ DH5/AES256-GCM16'); ESP rows 'ESP/G256/ /DH20' or
+    'ESP/A256/SHA256/DH14'. Rows can wrap, so the text after the peer address is searched.
+    Returns the tunnel IDs too, for `show vpn flow tunnel-id`."""
+    v2 = ike_text.split("IKEv2 SAs", 1)[1] if "IKEv2 SAs" in ike_text else ike_text
+    m = re.search(r"(?m)^\s*\d+\s+" + re.escape(peer) + r"\b(.*?)(?=^\s*\d+\s+\d+\.\d+\.\d+\.\d+\s|^Show IKEv2|\Z)", v2, re.S)
+    if not m:
+        return None
+    row = m.group(1)
+    ike = {"state": "ESTABLISHED" if re.search(r"\bEstablished\b", row) else (re.findall(r"\b([A-Z][a-z]+(?: [a-z]+)?)\s*$", row.strip()) or ["?"])[-1].upper()}
+    a = re.search(r"(?:PSK|RSA|ECDSA\w*)/\s*DH(\d+)/\s*([\w-]+)(?:/\s*([\w-]*))?", row)
+    if a:
+        ike["dh"] = int(a.group(1))
+        ike["encr"] = _panos_enc(a.group(2))
+        ike["integ"] = None if ike["encr"].startswith("AES-GCM") else _panos_hash(a.group(3))
+    esp, tunnels = {}, []
+    for row in re.finditer(r"(?m)^\s*(\d+)\s+(\d+)\s+" + re.escape(peer) + r"\b(.*?)(?=^\s*\d+\s+\d+\s+\d+\.\d+|^Show IPSec|\Z)", ipsec_text, re.S):
+        tunnels.append(int(row.group(2)))
+        e = re.search(r"ESP/\s*([AG]\d+|3DES|[\w-]*\d{3}[\w-]*)/\s*([\w-]*)\s*/?\s*(?:DH(\d+))?", row.group(3))
+        if e and not esp:
+            esp["encr"] = _panos_enc(e.group(1))
+            esp["integ"] = None if esp["encr"].startswith("AES-GCM") else _panos_hash(e.group(2))
+            if e.group(3):
+                esp["pfs"] = int(e.group(3))
+    return {"ike": ike, "esp": esp, "counters": {}, "tunnels": tunnels}
+
+
+def parse_panos_flow(text):
+    """encap/decap packet counters from `show vpn flow tunnel-id N`."""
+    get = lambda k: int((re.search(k + r" packets:\s*(\d+)", text) or [0, 0])[1])
+    return {"encaps": get("encap"), "decaps": get("decap")}
 
 
 def ping_ok(text):
@@ -1003,7 +1062,81 @@ class OpenWrt(Shell):
         return ping_ok(self.run(f"ping -c 5 -W 1 -I {src} {dst}", 60))
 
 
-DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx, "vyos": Vyos, "openwrt": OpenWrt}
+class PanOs(Driver):
+    """PAN-OS (VM-Series) over the serial console: admin login (the first login forces a
+    password change), wait for the chassis, scripting mode, configure, set lines, commit.
+    Runs unlicensed: the IPsec features need no licence, the session limit (1,200) is enough."""
+
+    prompt = r"^[\w.-]+@[\w.-]+[>#] ?$"
+
+    def login(self, timeout):
+        pw = self.node.get("password", "TMlab-Admin-1")
+        tries = ["admin", pw]  # factory default admin/admin, then the one we set
+        answers = [
+            (r"login: ?$", "admin"),
+            (r"^Password: ?$", None),
+            (r"(?i)old password ?: ?$", "admin"),
+            (r"(?i)(?:confirm|re-?enter|retype)[\w ]*password ?: ?$", pw),
+            (r"(?i)new password ?: ?$", pw),
+            (r"(?i)login incorrect", ""),
+        ]
+        end = time.time() + timeout
+        self.con.sendline()
+        while time.time() < end:
+            try:
+                i, _, _ = self.con.expect([a[0] for a in answers] + [self.prompt], 30)
+            except TimeoutError:
+                self.con.sendline()
+                continue
+            if i == len(answers):
+                break
+            if i == 1:
+                self.con.sendline(tries.pop(0) if tries else pw)
+            else:
+                self.con.sendline(answers[i][1])
+        else:
+            raise TimeoutError("PAN-OS did not reach the CLI")
+        self.con.drain(2)
+        # the CLI comes up before the management server and the auto-commit are done
+        while time.time() < end:
+            if re.search(r"(?mi)^\s*yes\s*$", self.run("show chassis-ready", 60)):
+                break
+            time.sleep(15)
+        else:
+            raise TimeoutError("PAN-OS: show chassis-ready never said yes")
+        for cmd in ("set cli pager off", "set cli scripting-mode on", "set cli confirmation-prompt off"):
+            self.run(cmd, 60)
+
+    def _check(self, line, out):
+        for err in re.findall(r"(?mi)^.*(?:invalid syntax|unknown command|validation error|server error|"
+                              r"is not a valid|is invalid|failed|error:).*$", out):
+            self.errors.append(f"{line} → {err.strip()}")
+
+    def apply(self):
+        self.run("configure", 120)
+        for line in self.node["lines"]:
+            out = self.run(line, 60)
+            if not line.startswith("delete "):  # removing factory objects that may not exist is fine
+                self._check(line, out)
+        out = self.run("commit", 900)
+        self._check("commit", out)
+        if not re.search(r"(?i)configuration committed successfully|commit job \d+ .*succeeded|committed successfully", out):
+            self.errors.append("commit did not complete: " + out.strip()[-300:])
+        self.run("exit", 60)
+
+    def ping(self, src, dst):
+        return ping_ok(self.run(f"ping source {src} count 5 host {dst}", 90))
+
+    def sas(self, peer):
+        sa = parse_panos(self.run("show vpn ike-sa", 60), self.run("show vpn ipsec-sa", 60), peer)
+        if sa:
+            for tid in sa.pop("tunnels"):
+                c = parse_panos_flow(self.run(f"show vpn flow tunnel-id {tid}", 60))
+                sa["counters"] = {k: sa["counters"].get(k, 0) + c[k] for k in ("encaps", "decaps")}
+        return sa
+
+
+DRIVERS = {"iosxe": IosXe, "asa": Asa, "opnsense": OpnSense, "pfsense": PfSense, "strongswan": StrongSwan, "mikrotik": MikroTik, "vsrx": Vsrx, "vyos": Vyos, "openwrt": OpenWrt, "panos": PanOs}
 
 
 # --------------------------------------------------------------------------- checks
@@ -1162,6 +1295,7 @@ def main():
                      set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'ascii-text \\"(\w+)\\"', json.dumps(plan))) |
+                     set(re.findall(r'pre-shared-key key \\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r"secret '(\w+)'", json.dumps(plan))) |
                      set(re.findall(r"pre_shared_key='(\w+)'", json.dumps(plan))))
 

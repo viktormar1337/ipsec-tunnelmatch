@@ -2,6 +2,7 @@
 
 [![Open the tool](https://img.shields.io/badge/Open%20the%20tool-viktormar1337.github.io%2Fipsec--tunnelmatch-2ea44f?logo=github)](https://viktormar1337.github.io/ipsec-tunnelmatch/)
 [![Lab](https://github.com/viktormar1337/ipsec-tunnelmatch/actions/workflows/lab.yml/badge.svg)](https://github.com/viktormar1337/ipsec-tunnelmatch/actions/workflows/lab.yml)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-viktormar-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/viktormar)
 
 **▶ Use it here: <https://viktormar1337.github.io/ipsec-tunnelmatch/>**
 

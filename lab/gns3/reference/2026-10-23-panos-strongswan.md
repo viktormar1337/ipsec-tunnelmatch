@@ -64,3 +64,47 @@ PAN-OS 12.2 with Advanced Routing off (`show system info`: `advanced-routing: of
 - ✅ TM-PANOS: IKE AES-GCM-256 / 20
 - ✅ TM-PANOS: ESP AES-GCM-256 / 20
 - ✅ TM-PANOS: packets out 9, in 9
+
+
+## Follow-up: one interface and host per network
+
+With `--lans 2` and `--lans 3`, every PAN-OS network has its own interface (`ethernet1/2`, `ethernet1/3`, `ethernet1/4`; PA-VM template with 5 adapters) and its own LAN switch and VPCS host (10.10.0.10, 10.10.100.10, 10.10.200.10), so no ping is skipped. 2026-10-23, PAN-OS 12.2.3 <-> strongSwan 6.1.0:
+
+| Networks per site | Subnet pairs | Pings | Child SAs (both sides) | Packets out / in (both sides) |
+|---|---|---|---|---|
+| 2 | 4 | 8/8 | 4 of 4 | 36 / 36 |
+| 3 | 9 | 18/18 | 9 of 9 | 81 / 81 |
+
+Three networks:
+
+### ✅ TM-STRONGSWAN ↔ TM-PANOS
+
+- ✅ Tool reports no crypto errors for this pair
+- ✅ Ping TM-STRONGSWAN 10.4.0.1 → 10.10.0.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.0.1 → 10.10.100.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.0.1 → 10.10.200.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.100.1 → 10.10.0.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.100.1 → 10.10.100.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.100.1 → 10.10.200.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.200.1 → 10.10.0.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.200.1 → 10.10.100.10: 4/5 replies
+- ✅ Ping TM-STRONGSWAN 10.4.200.1 → 10.10.200.10: 4/5 replies
+- ✅ Ping TM-PANOS 10.10.0.10 → 10.4.0.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.0.10 → 10.4.100.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.0.10 → 10.4.200.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.100.10 → 10.4.0.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.100.10 → 10.4.100.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.100.10 → 10.4.200.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.200.10 → 10.4.0.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.200.10 → 10.4.100.1: 5/5 replies
+- ✅ Ping TM-PANOS 10.10.200.10 → 10.4.200.1: 5/5 replies
+- ✅ TM-STRONGSWAN: IKE SA state ESTABLISHED
+- ✅ TM-STRONGSWAN: IKE AES-GCM-256 / SHA384 / 20
+- ✅ TM-STRONGSWAN: ESP AES-GCM-256
+- ✅ TM-STRONGSWAN: child SAs for 9 of 9 subnet pairs
+- ✅ TM-STRONGSWAN: packets out 81, in 81
+- ✅ TM-PANOS: IKE SA state ESTABLISHED
+- ✅ TM-PANOS: IKE AES-GCM-256 / 20
+- ✅ TM-PANOS: ESP AES-GCM-256 / 20
+- ✅ TM-PANOS: child SAs for 9 of 9 subnet pairs
+- ✅ TM-PANOS: packets out 81, in 81

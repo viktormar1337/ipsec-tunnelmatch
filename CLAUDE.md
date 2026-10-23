@@ -51,7 +51,8 @@ Status:
 - PAN-OS 12.2.3 (VM-Series, unlicensed) <-> strongSwan 6.1.0: passed 2026-10-23
   (`lab/gns3/reference/2026-10-23-panos-strongswan.md`), with a fix to the PAN-OS generator
   (`crypto-profiles` path), released 2026-10-23. Template "PA-VM" from the user's own qcow2
-  (16 GB RAM, 2 vCPU, QEMU option `-cpu host`, adapter 1 = ethernet1/1).
+  (16 GB RAM, 2 vCPU, QEMU option `-cpu host`, 5 adapters: 1 = ethernet1/1 WAN, 2-4 =
+  ethernet1/2-1/4 LANs, each with a VPCS host that does the PAN-OS-side pings).
 - The strongSwan image is built from Debian forky (strongSwan 6.1.0). OPNsense, pfSense, MikroTik,
   VyOS, OpenWrt and PAN-OS each passed against it 2026-10-23
   (`lab/gns3/reference/2026-10-23-strongswan-6.1-retest.md`).

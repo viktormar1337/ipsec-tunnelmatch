@@ -1150,11 +1150,11 @@ class PanOs(Driver):
             self.errors.append("commit did not complete: " + out.strip()[-300:])
         self.run("exit", 60)
 
-    host = None  # VpcsHost on the LAN interface (lan_host), set by main()
+    hosts = {}  # address -> VpcsHost on a LAN interface (lan_host), set by main()
 
     def ping(self, src, dst):
-        if self.host and src == self.node.get("lan_host"):
-            return self.host.ping(src, dst)
+        if src in self.hosts:
+            return self.hosts[src].ping(src, dst)
         out = self.run(f"ping source {src} count 5 host {dst}", 90)
         # 12.2 rejects this without logical-router, and with it looks for the Advanced Routing
         # namespace ("Cannot open network namespace"), which the legacy virtual router lacks
@@ -1170,6 +1170,10 @@ class PanOs(Driver):
                 c = parse_panos_flow(self.run(f"show vpn flow tunnel-id {tid}", 60))
                 sa["counters"] = {k: sa["counters"].get(k, 0) + c[k] for k in ("encaps", "decaps")}
         return sa
+
+
+def host_name(nid, k):
+    return f"TM-HOST-{nid.upper()}" + (f"-{k + 1}" if k else "")
 
 
 class VpcsHost(Driver):
@@ -1429,9 +1433,14 @@ def main():
             if n.get("lan_port"):
                 lan = g.add_node(pid, switch["template_id"], f"TM-LAN-{nid.upper()}", x * 2, y * 2, compute)
                 g.add_link(pid, (made[nid]["node_id"], n["lan_port"]["adapter"], n["lan_port"]["port"]), (lan["node_id"], 0, 0))
-                if n.get("lan_host"):
-                    host = g.add_node(pid, vpcs["template_id"], f"TM-HOST-{nid.upper()}", x * 2 + 150, y * 2, compute)
-                    g.add_link(pid, (host["node_id"], 0, 0), (lan["node_id"], 0, 1))
+            # one LAN switch and VPCS host per network that has a host (lan_host); the first
+            # switch is the one above
+            for k, l in enumerate(l for l in n.get("lans", []) if l.get("host")):
+                if k:
+                    lan = g.add_node(pid, switch["template_id"], f"TM-LAN{k + 1}-{nid.upper()}", x * 2, y * 2 + 120 * k, compute)
+                    g.add_link(pid, (made[nid]["node_id"], l["adapter"], 0), (lan["node_id"], 0, 0))
+                host = g.add_node(pid, vpcs["template_id"], host_name(nid, k), x * 2 + 150, y * 2 + 120 * k, compute)
+                g.add_link(pid, (host["node_id"], 0, 0), (lan["node_id"], 0, 1))
         log("Starting nodes")
         g.start_all(pid)
     else:
@@ -1465,12 +1474,14 @@ def main():
             if not opt.reuse:
                 log(f"{NAMES[nid]}: applying config")
                 d.apply()
-            if n.get("lan_host"):
-                hname = f"TM-HOST-{nid.upper()}"
+            d.hosts = {}
+            for k, l in enumerate(l for l in n.get("lans", []) if l.get("host")):
+                hname = host_name(nid, k)
                 hhost, hport, _ = g.console(pid, by_name[hname]["node_id"])
-                d.host = VpcsHost(n, plan, Console(hhost, hport, os.path.join(RESULTS, f"{nid}-host.log"), secrets))
-                d.host.setup(n["lan_host"], n["lan"].split("/")[1], n["lan_ip"])
-                log(f"{NAMES[nid]}: LAN host {hname} at {n['lan_host']}")
+                h = VpcsHost(n, plan, Console(hhost, hport, os.path.join(RESULTS, f"{nid}-host{k + 1}.log"), secrets))
+                h.setup(l["host"], l["net"].split("/")[1], l["ip"])
+                d.hosts[l["host"]] = h
+                log(f"{NAMES[nid]}: LAN host {hname} at {l['host']}")
             nr["status"] = "configured" if not d.errors else "configured with errors"
         except Exception as e:  # keep going: the other nodes can still be tested
             d.errors.append(f"{type(e).__name__}: {e}")

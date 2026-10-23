@@ -1192,8 +1192,10 @@ class VpcsHost(Driver):
             except TimeoutError:
                 if time.time() > end:
                     raise TimeoutError("VPCS gave no prompt")
-        out = self.run(f"ip {ip}/{prefix} {gateway}", 30)  # VPCS checks for a duplicate address first
-        if ip not in out:
+        self.con.drain(2)  # the wake-up newlines leave more prompts behind; a stale one would end the next command early
+        self.run(f"ip {ip}/{prefix} {gateway}", 30)  # VPCS checks for a duplicate address first
+        out = self.run("show ip", 30)
+        if not re.search(r"IP/MASK\s*:\s*" + re.escape(f"{ip}/{prefix}"), out):
             raise RuntimeError(f"VPCS did not take the address: {out.strip()[:200]}")
 
     def ping(self, src, dst):
@@ -1478,7 +1480,10 @@ def main():
             for k, l in enumerate(l for l in n.get("lans", []) if l.get("host")):
                 hname = host_name(nid, k)
                 hhost, hport, _ = g.console(pid, by_name[hname]["node_id"])
-                h = VpcsHost(n, plan, Console(hhost, hport, os.path.join(RESULTS, f"{nid}-host{k + 1}.log"), secrets))
+                hlog = os.path.join(RESULTS, f"{nid}-host{k + 1}.log")
+                with open(hlog, "w", encoding="utf-8") as f:  # one run per log, like the node logs
+                    f.write(f"# {hname} console {hhost}:{hport}, run started {meta['when']}\n")
+                h = VpcsHost(n, plan, Console(hhost, hport, hlog, secrets))
                 h.setup(l["host"], l["net"].split("/")[1], l["ip"])
                 d.hosts[l["host"]] = h
                 log(f"{NAMES[nid]}: LAN host {hname} at {l['host']}")

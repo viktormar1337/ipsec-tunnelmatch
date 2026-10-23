@@ -5,7 +5,7 @@ configs the tool generated (lab/gns3/generate.js) over the node consoles, and ch
 every tunnel: SAs up, negotiated algorithms as expected, and traffic both ways.
 
     python3 lab/gns3/run.py [--config lab/gns3/lab.json] [--profile strongest]
-                            [--keep] [--reuse] [--nodes iosxe,strongswan] [--dry-run]
+                            [--keep] [--reuse] [--nodes iosxe,strongswan] [--lans 2] [--dry-run]
 
 Python 3.9+ standard library only (telnetlib is gone in 3.13, so a small telnet
 client is included). Needs Node.js for the plan, and a GNS3 2.2 or 3.x server with
@@ -433,11 +433,20 @@ def parse_swanctl_raw(raw, peer):
                 esp = algs(installed[0], False)
                 counters = {"encaps": sum(int(field(k, "packets-out") or 0) for k in installed),
                             "decaps": sum(int(field(k, "packets-in") or 0) for k in installed)}
-        found.append({"ike": ike, "esp": esp, "counters": counters})
+        found.append({"ike": ike, "esp": esp, "counters": counters,
+                      "ts": {(field(k, "local-ts"), field(k, "remote-ts")) for k in installed} if at >= 0 else set()})
     # when both ends initiated at once there can be a second IKE_SA, still CONNECTING or
     # about to be deleted as a duplicate: report the established one that carries the traffic
-    found.sort(key=lambda r: (r["ike"]["state"] != "ESTABLISHED", not r["esp"]))
-    return found[0] if found else None
+    found.sort(key=lambda r: (r["ike"]["state"] != "ESTABLISHED", not r["esp"],
+                              -(r["counters"].get("encaps", 0) + r["counters"].get("decaps", 0))))
+    if not found:
+        return None
+    # subnet pairs with an installed child SA, over all IKE_SAs toward the peer (with duplicates
+    # the pairs can be spread over both)
+    best = dict(found[0])
+    best["pairs"] = len(set().union(*(r.pop("ts") for r in found)))
+    best.pop("ts", None)
+    return best
 
 
 def parse_routeros_sas(peers_text, sa_text, me, peer):
@@ -648,7 +657,7 @@ class IosXe(Driver):
         self.run("end")
 
     def ping(self, src, dst):
-        return ping_ok(self.run(f"ping {dst} source Loopback1 repeat 5 timeout 1", 60))
+        return ping_ok(self.run(f"ping {dst} source {src} repeat 5 timeout 1", 60))
 
     def sas(self, peer):
         ike = parse_cisco_ikev2(self.run("show crypto ikev2 sa detailed", 60), peer)
@@ -1071,14 +1080,17 @@ class PanOs(Driver):
 
     def login(self, timeout):
         pw = self.node.get("password", "TMlab-Admin-1")
-        tries = ["admin", pw]  # factory default admin/admin, then the one we set
+        tries = ["admin", pw]  # factory default admin/admin or the one we set; alternated per attempt
+        attempt = 0
         answers = [
+            (r"^(?:vm|PA-HDF) login: ?$", None),  # boot stages; admin/admin is rejected until "PA-VM login:"
             (r"login: ?$", "admin"),
             (r"^Password: ?$", None),
-            (r"(?i)old password ?: ?$", "admin"),
-            (r"(?i)(?:confirm|re-?enter|retype)[\w ]*password ?: ?$", pw),
-            (r"(?i)new password ?: ?$", pw),
+            (r"(?i)old password\s*: ?$", "admin"),  # 12.2: "Confirm password   :" (padded)
+            (r"(?i)(?:confirm|re-?enter|retype)[\w ]*password\s*: ?$", pw),
+            (r"(?i)new password\s*: ?$", pw),
             (r"(?i)login incorrect", ""),
+            (r"Maintenance Recovery Tool", None),
         ]
         end = time.time() + timeout
         self.con.sendline()
@@ -1090,8 +1102,22 @@ class PanOs(Driver):
                 continue
             if i == len(answers):
                 break
-            if i == 1:
-                self.con.sendline(tries.pop(0) if tries else pw)
+            if i == len(answers) - 1:
+                # e.g. too little RAM: "Requires at least 14.0GB of memory for PA-VM nolic license"
+                self.con.sendline()  # Continue → menu, its first entry is "Maintenance Entry Reason"
+                self.con.sendline()
+                try:
+                    _, m, _ = self.con.expect([r"Entry Reason:[^\n<]*?Reason: *([^\n<\[]+)"], 30)
+                    reason = m.group(1).strip()
+                except TimeoutError:
+                    reason = "see the console log"
+                raise RuntimeError(f"PAN-OS booted into maintenance mode: {reason}")
+            if i == 0:
+                self.con.drain(30, 60)
+                self.con.sendline()
+            elif i == 2:
+                self.con.sendline(tries[attempt % 2])
+                attempt += 1
             else:
                 self.con.sendline(answers[i][1])
         else:
@@ -1125,11 +1151,17 @@ class PanOs(Driver):
         self.run("exit", 60)
 
     def ping(self, src, dst):
-        return ping_ok(self.run(f"ping source {src} count 5 host {dst}", 90))
+        out = self.run(f"ping source {src} count 5 host {dst}", 90)
+        # 12.2 rejects this without logical-router, and with it looks for the Advanced Routing
+        # namespace ("Cannot open network namespace"), which the legacy virtual router lacks
+        if re.search(r"Invalid syntax|Cannot open network namespace", out):
+            return None
+        return ping_ok(out)
 
     def sas(self, peer):
         sa = parse_panos(self.run("show vpn ike-sa", 60), self.run("show vpn ipsec-sa", 60), peer)
         if sa:
+            sa["pairs"] = len(sa["tunnels"])  # one ipsec-sa row (tunnel ID) per proxy-ID
             for tid in sa.pop("tunnels"):
                 c = parse_panos_flow(self.run(f"show vpn flow tunnel-id {tid}", 60))
                 sa["counters"] = {k: sa["counters"].get(k, 0) + c[k] for k in ("encaps", "decaps")}
@@ -1162,14 +1194,18 @@ def test_pair(pair, drivers):
     check(not pair["verdict"]["cryptoErrors"], "Tool reports no crypto errors for this pair")
     for side, other in (("a", "b"), ("b", "a")):
         d = drivers[pair[side]]
-        src, dst = pair["ping"][side]["src"], pair["ping"][side]["dst"]
-        got = (0, 0)
-        for _ in range(4):  # the first packets start the negotiation
-            got = d.ping(src, dst)
-            if got[0] >= 3:
+        for p in pair["pings"][side]:
+            src, dst = p["src"], p["dst"]
+            got = (0, 0)
+            for _ in range(4):  # the first packets start the negotiation
+                got = d.ping(src, dst)
+                if got is None or got[0] >= 3:
+                    break
+                time.sleep(5)
+            if got is None:  # the device cannot ping from its LAN address; the peer's ping and the SA counters cover it
+                check(True, f"Ping {NAMES[pair[side]]} {src} → {dst}: skipped, not possible from this device's CLI")
                 break
-            time.sleep(5)
-        check(got[0] > 0, f"Ping {NAMES[pair[side]]} {src} → {dst}: {got[0]}/{got[1]} replies")
+            check(got[0] > 0, f"Ping {NAMES[pair[side]]} {src} → {dst}: {got[0]}/{got[1]} replies")
     for side, other in (("a", "b"), ("b", "a")):
         d = drivers[pair[side]]
         sa = d.sas(pair["peers"][other])
@@ -1186,6 +1222,9 @@ def test_pair(pair, drivers):
             check(not bad, f"{name}: ESP {fmt(sa['esp'])}" + (f" — mismatch: {', '.join(bad)}" if bad else ""))
         else:
             check(False, f"{name}: no installed child SA")
+        want = pair.get("subnetPairs", 1)
+        if want > 1 and sa.get("pairs") is not None:
+            check(sa["pairs"] >= want, f"{name}: child SAs for {sa['pairs']} of {want} subnet pairs")
         c = sa.get("counters") or {}
         if c:
             check(c.get("encaps", 0) > 0 and c.get("decaps", 0) > 0, f"{name}: packets out {c.get('encaps', 0)}, in {c.get('decaps', 0)}")
@@ -1253,6 +1292,7 @@ def main():
     ap.add_argument("--nodes", default=None, help="comma-separated subset, e.g. iosxe,strongswan")
     ap.add_argument("--keep", action="store_true", help="leave the project running afterwards")
     ap.add_argument("--reuse", action="store_true", help="use the existing project and running nodes; skip build and config push")
+    ap.add_argument("--lans", type=int, default=1, help="networks per node (1-3); each tunnel then carries N x N subnet pairs")
     ap.add_argument("--dry-run", action="store_true", help="generate the plan and check the GNS3 server and templates only")
     opt = ap.parse_args()
 
@@ -1285,6 +1325,8 @@ def main():
     gen = ["node", os.path.join(HERE, "generate.js"), "--config", cfg_path]
     if opt.profile:
         gen += ["--profile", opt.profile]
+    if opt.lans != 1:
+        gen += ["--lans", str(opt.lans)]
     if subprocess.run(gen).returncode != 0:
         sys.exit("Plan generation failed (message above).")
     with open(os.path.join(HERE, "out", "plan.json"), encoding="utf-8") as f:

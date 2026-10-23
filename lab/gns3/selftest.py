@@ -186,6 +186,22 @@ SWANCTL_TWO_SAS = (
     "list-sas reply {}\n"
 )
 
+# strongSwan 6.1 with VyOS (2026-10-23): both ends initiated and both IKE_SAs stay ESTABLISHED;
+# the traffic runs on the second one
+SWANCTL_TWO_ESTABLISHED = (
+    "list-sa event {vyos {uniqueid=2 version=2 state=ESTABLISHED local-host=203.0.113.14 local-port=4500 "
+    "remote-host=203.0.113.18 remote-port=4500 initiator-spi=27256f2518952475 responder-spi=28770b982c496644 "
+    "encr-alg=AES_GCM_16 encr-keysize=256 prf-alg=PRF_HMAC_SHA2_384 dh-group=ECP_384 established=29 "
+    "child-sas {vyos-1-2 {name=vyos-1 uniqueid=2 reqid=1 state=INSTALLED mode=TUNNEL protocol=ESP "
+    "encr-alg=AES_GCM_16 encr-keysize=256 packets-in=0 packets-out=0 local-ts=[10.4.0.0/24] remote-ts=[10.8.0.0/24]}}}}\n"
+    "list-sa event {vyos {uniqueid=1 version=2 state=ESTABLISHED local-host=203.0.113.14 local-port=4500 "
+    "remote-host=203.0.113.18 remote-port=4500 initiator=yes initiator-spi=d2ff5bd3f9ae8679 responder-spi=aa43c7b318c2d495 "
+    "encr-alg=AES_GCM_16 encr-keysize=256 prf-alg=PRF_HMAC_SHA2_384 dh-group=ECP_384 established=22 "
+    "child-sas {vyos-1-3 {name=vyos-1 uniqueid=3 reqid=1 state=INSTALLED mode=TUNNEL protocol=ESP "
+    "encr-alg=AES_GCM_16 encr-keysize=256 packets-in=10 packets-out=10 local-ts=[10.4.0.0/24] remote-ts=[10.8.0.0/24]}}}}\n"
+    "list-sas reply {}\n"
+)
+
 
 def test_parsers():
     r = run.parse_cisco_ikev2(IOSXE_IKEV2, "203.0.113.12")
@@ -214,6 +230,12 @@ def test_parsers():
     check(r and r["ike"]["state"] == "ESTABLISHED" and r["esp"] == {"encr": "AES-GCM-256", "integ": None}
           and r["counters"] == {"encaps": 5, "decaps": 5}, f"swanctl: established IKE_SA preferred over a CONNECTING duplicate: {r}")
     check(run.parse_swanctl_raw(SWANCTL_TWO_SAS, "203.0.113.99") is None, "swanctl: unknown peer gives None")
+    r = run.parse_swanctl_raw(SWANCTL_TWO_ESTABLISHED, "203.0.113.18")
+    check(r and r["counters"] == {"encaps": 10, "decaps": 10}, f"swanctl: of two ESTABLISHED IKE_SAs, the one with traffic: {r}")
+    check(r and r["pairs"] == 1, f"swanctl: the same subnet pair on both IKE_SAs counts once: {r and r['pairs']}")
+    two = SWANCTL_TWO_ESTABLISHED.replace("remote-ts=[10.8.0.0/24]}}}}\nlist-sa event {vyos {uniqueid=1", "remote-ts=[10.8.100.0/24]}}}}\nlist-sa event {vyos {uniqueid=1")
+    r = run.parse_swanctl_raw(two, "203.0.113.18")
+    check(r and r["pairs"] == 2, f"swanctl: subnet pairs spread over two IKE_SAs are both counted: {r and r['pairs']}")
     r = run.parse_panos(PANOS_IKE, PANOS_IPSEC, "203.0.113.14")
     check(r == {"ike": {"state": "ESTABLISHED", "dh": 20, "encr": "AES-GCM-256", "integ": None},
                 "esp": {"encr": "AES-GCM-256", "integ": None, "pfs": 20}, "counters": {}, "tunnels": [4]},

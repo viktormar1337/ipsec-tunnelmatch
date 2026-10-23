@@ -6,7 +6,10 @@
  * checks and generators for both sides, and merges each node's tunnels into one
  * config. run.py then pushes the configs over the GNS3 consoles and verifies them.
  *
- *   node lab/gns3/generate.js [--config lab/gns3/lab.json] [--profile strongest|recommended|minimum]
+ *   node lab/gns3/generate.js [--config lab/gns3/lab.json] [--profile strongest|recommended|minimum] [--lans 2]
+ *
+ * --lans N gives every node N local networks (its "lan" plus 10.x.100.0/24, 10.x.200.0/24 in
+ * the same layout), so each tunnel carries N x N subnet pairs.
  *
  * Output (lab/gns3/out/, git-ignored because it holds the lab's pre-shared keys):
  *   plan.json        everything run.py needs
@@ -51,7 +54,21 @@ function args() {
   const get = (flag, def) => { const i = a.indexOf(flag); return i >= 0 ? a[i + 1] : def; };
   const cfgPath = get("--config", fs.existsSync(path.join(HERE, "lab.json")) ? path.join(HERE, "lab.json") : path.join(HERE, "lab.example.json"));
   const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
-  return { cfg, cfgPath, profile: get("--profile", cfg.profile || "strongest"), out: get("--out", path.join(HERE, "out")) };
+  const lans = Number(get("--lans", 1));
+  if (!(lans >= 1 && lans <= 3)) throw new Error(`--lans must be 1, 2 or 3 (got ${get("--lans")})`);
+  return { cfg, cfgPath, profile: get("--profile", cfg.profile || "strongest"), out: get("--out", path.join(HERE, "out")), lans };
+}
+
+/* The node's networks: its "lan", then the same addresses with the third octet 100, 200. */
+function lansOf(n, count) {
+  const third = (addr, k) => addr.replace(/^(\d+\.\d+)\.\d+\./, `$1.${100 * k}.`);
+  const out = [{ net: n.lan, ip: n.lan_ip }];
+  for (let k = 1; k < count; k++) {
+    const net = third(n.lan, k);
+    if (!TM.parseCidr(net) || +n.lan.split("/")[1] < 24) throw new Error(`--lans: cannot derive a second network from ${n.lan} (needs a /24 or smaller)`);
+    out.push({ net, ip: third(n.lan_ip, k) });
+  }
+  return out;
 }
 
 /* A tool state for one tunnel between two lab nodes. */
@@ -64,7 +81,7 @@ function stateFor(cfg, a, b, crypto_) {
       name: KINDS[id].name,
       vendor: KINDS[id].vendor,
       ip: n.wan_ip,
-      nets: n.lan,
+      nets: n.lans.map((l) => l.net).join("\n"),
       // policy-based wherever the platform has it; Junos is route-based only (st0 + traffic selectors)
       mode: v.modes.includes("policy") ? "policy" : v.modes[0],
     }, id === "asa" ? { iface: "outside" } : {}, id === "iosxe" || id === "vyos" ? { iface: n.wan_if } : {},
@@ -121,7 +138,7 @@ function mergeIosxe(node, tunnels) {
     `hostname TM-IOSXE`,
     ...(node.extra_config || []),
     `interface ${node.wan_if}`, ` ip address ${node.wan_ip} ${mask(node.wan_ip, node.prefix)}`, ` no shutdown`, `!`,
-    `interface Loopback1`, ` ip address ${node.lan_ip} ${maskOf(node.lan)}`, `!`,
+    ...node.lans.flatMap((l, i) => [`interface Loopback${i + 1}`, ` ip address ${l.ip} ${maskOf(l.net)}`, `!`]),
     ...node.routes.map((r) => `ip route ${r.net} ${r.mask} ${r.via}`),
     ...body.join("\n!\n").split("\n"),
     `crypto ikev2 policy POL-TMLAB`,
@@ -132,6 +149,7 @@ function mergeIosxe(node, tunnels) {
 }
 
 function mergeAsa(node, tunnels) {
+  if (node.lans.length > 1) throw new Error("ASA: --lans needs a second inside interface per network; not supported in the lab");
   const body = tunnels.map((t, i) => t.text
     .replace(/<PSK>/g, t.psk)
     .replace(/crypto ikev2 policy 10\b/g, `crypto ikev2 policy ${10 * (i + 1)}`)
@@ -200,7 +218,8 @@ function mergeOpnsense(node, tunnels) {
       lan_if: node.lan_if, lan_ip: node.lan_ip, lan_prefix: Number(node.lan.split("/")[1]),
       connections,
     },
-    shell: node.routes.map((r) => `route add -net ${r.cidr} ${r.via}`),
+    shell: [...extraLans(node).map((l) => `ifconfig ${node.lan_if} inet ${l.ip}/${l.net.split("/")[1]} alias`),
+      ...node.routes.map((r) => `route add -net ${r.cidr} ${r.via}`)],
   };
 }
 
@@ -263,7 +282,8 @@ function mergePfsense(node, tunnels) {
       lan_if: node.lan_if, lan_ip: node.lan_ip, lan_prefix: Number(node.lan.split("/")[1]),
       tunnels: conns,
     },
-    shell: node.routes.map((r) => `route add -net ${r.cidr} ${r.via}`),
+    shell: [...extraLans(node).map((l) => `ifconfig ${node.lan_if} inet ${l.ip}/${l.net.split("/")[1]} alias`),
+      ...node.routes.map((r) => `route add -net ${r.cidr} ${r.via}`)],
   };
 }
 
@@ -283,13 +303,12 @@ function routerosCommands(text) {
 }
 
 function mergeMikrotik(node, tunnels) {
-  const lanPrefix = node.lan.split("/")[1];
   const lines = [
     "/system identity set name=TM-MIKROTIK",
     `/ip address add address=${node.wan_ip}/${node.prefix} interface=${node.wan_if}`,
     // the LAN address sits on an empty bridge, RouterOS's usual loopback
     "/interface bridge add name=lan0",
-    `/ip address add address=${node.lan_ip}/${lanPrefix} interface=lan0`,
+    ...node.lans.map((l) => `/ip address add address=${l.ip}/${l.net.split("/")[1]} interface=lan0`),
     ...node.routes.map((r) => `/ip route add dst-address=${r.cidr} gateway=${r.via}`),
     ...(node.extra_config || []),
     ...tunnels.flatMap((t) => routerosCommands(t.text.replace(/<PSK>/g, t.psk))),
@@ -301,13 +320,12 @@ function mergeMikrotik(node, tunnels) {
    route-based with one traffic selector per subnet pair; auto route insertion adds the routes,
    so no static routes here. */
 function mergeVsrx(node, tunnels) {
-  const lanPrefix = node.lan.split("/")[1];
   const wan = `${node.wan_if}.0`;
   const lines = [
     "set system host-name TM-VSRX",
     `delete interfaces ${node.wan_if}`,
     `set interfaces ${node.wan_if} unit 0 family inet address ${node.wan_ip}/${node.prefix}`,
-    `set interfaces lo0 unit 0 family inet address ${node.lan_ip}/${lanPrefix}`,
+    ...node.lans.map((l) => `set interfaces lo0 unit 0 family inet address ${l.ip}/${l.net.split("/")[1]}`),
     `set security zones security-zone untrust interfaces ${wan} host-inbound-traffic system-services ike`,
     `set security zones security-zone untrust interfaces ${wan} host-inbound-traffic system-services ping`,
     "set security zones security-zone trust interfaces lo0.0 host-inbound-traffic system-services ping",
@@ -327,6 +345,7 @@ function mergePanos(node, tunnels) {
   const strip = (l) => l.replace(/\s+#.*$/, "").trim();
   const tool = tunnels.flatMap((t) => t.text.replace(/<PSK>/g, t.psk).split("\n").map(strip).filter((l) => l && !l.startsWith("#")));
   const units = [...new Set(tool.map((l) => (l.match(/^set network interface tunnel units (tunnel\.\d+)/) || [])[1]).filter(Boolean))];
+  const loops = node.lans.map((l, i) => ({ unit: `loopback.${i + 1}`, ip: l.ip }));
   const lines = [
     "delete rulebase security rules rule1",
     "delete zone trust",
@@ -338,12 +357,12 @@ function mergePanos(node, tunnels) {
     "set network profiles interface-management-profile TM-PING ping yes",
     `set network interface ethernet ${node.wan_if} layer3 ip ${node.wan_ip}/${node.prefix}`,
     `set network interface ethernet ${node.wan_if} layer3 interface-management-profile TM-PING`,
-    `set network interface loopback units loopback.1 ip ${node.lan_ip}/32`,
-    "set network interface loopback units loopback.1 interface-management-profile TM-PING",
+    ...loops.flatMap((l) => [`set network interface loopback units ${l.unit} ip ${l.ip}/32`,
+      `set network interface loopback units ${l.unit} interface-management-profile TM-PING`]),
     ...units.map((u) => `set network interface tunnel units ${u} interface-management-profile TM-PING`),
-    `set network virtual-router default interface [ ${[node.wan_if, "loopback.1", ...units].join(" ")} ]`,
+    `set network virtual-router default interface [ ${[node.wan_if, ...loops.map((l) => l.unit), ...units].join(" ")} ]`,
     `set zone untrust network layer3 ${node.wan_if}`,
-    "set zone trust network layer3 loopback.1",
+    `set zone trust network layer3 ${loops.length > 1 ? `[ ${loops.map((l) => l.unit).join(" ")} ]` : loops[0].unit}`,
     ...(units.length ? [`set zone vpn network layer3 [ ${units.join(" ")} ]`] : []),
     "set rulebase security rules TM-LAB from any to any source any destination any application any service any action allow",
     ...(node.extra_config || []),
@@ -355,12 +374,11 @@ function mergePanos(node, tunnels) {
 /* VyOS: set commands from the tool (trailing "# ..." notes removed) after the lab's interfaces;
    the LAN address sits on a dummy interface. */
 function mergeVyos(node, tunnels) {
-  const lanPrefix = node.lan.split("/")[1];
   const strip = (l) => l.replace(/\s+#.*$/, "").trim();
   const lines = [
     "set system host-name TM-VYOS",
     `set interfaces ethernet ${node.wan_if} address '${node.wan_ip}/${node.prefix}'`,
-    `set interfaces dummy dum0 address '${node.lan_ip}/${lanPrefix}'`,
+    ...node.lans.map((l) => `set interfaces dummy dum0 address '${l.ip}/${l.net.split("/")[1]}'`),
     ...node.routes.map((r) => `set protocols static route ${r.cidr} next-hop ${r.via}`),
     ...(node.extra_config || []),
   ];
@@ -385,6 +403,7 @@ function mergeOpenwrt(node, tunnels) {
     "uci commit network",
     "/etc/init.d/network restart",
     "sleep 8",
+    ...extraLans(node).map((l) => `ip addr add ${l.ip}/${l.net.split("/")[1]} dev $(ifstatus lan | jsonfilter -e '@.l3_device')`),
     ...node.routes.map((r) => `ip route replace ${r.cidr} via ${r.via}`),
   ];
   tunnels.forEach((t) => {
@@ -415,7 +434,8 @@ function mergeStrongswan(node, tunnels) {
     `ip addr add ${node.wan_ip}/${node.prefix} dev ${node.wan_if}`,
     `ip link set ${node.wan_if} up`,
     // the LAN address sits on lo: works in any container, no dummy module needed
-    `ip link set lo up; ip addr add ${node.lan_ip}/32 dev lo`,
+    `ip link set lo up`,
+    ...node.lans.map((l) => `ip addr add ${l.ip}/32 dev lo`),
     ...node.routes.map((r) => `ip route replace ${r.cidr} via ${r.via} src ${node.lan_ip}`),
   ];
   return { files, shell };
@@ -425,23 +445,23 @@ function mergeStrongswan(node, tunnels) {
 
 function maskOf(cidr) { return TM.maskStr(TM.parseCidr(cidr)); }
 function mask(ip, prefix) { return maskOf(`${ip}/${prefix}`); }
+function extraLans(node) { return node.lans.slice(1); }
 function clean(lines) { return lines.filter((l) => l !== undefined && l.trim() !== ""); }
 
 /* ---------- main ---------- */
 
 function main() {
-  const { cfg, cfgPath, profile, out } = args();
+  const { cfg, cfgPath, profile, out, lans } = args();
   const prefix = Number(cfg.wan.net.split("/")[1]);
   const ids = Object.keys(KINDS).filter((id) => cfg.nodes[id] && cfg.nodes[id].enabled !== false);
   if (ids.length < 2) throw new Error("Enable at least two nodes in the lab config.");
+  ids.forEach((id) => { cfg.nodes[id].lans = lansOf(cfg.nodes[id], lans); });
 
   const nodes = {};
   ids.forEach((id) => {
     const n = Object.assign({ id, kind: id, prefix }, cfg.nodes[id]);
-    n.routes = ids.filter((o) => o !== id).map((o) => {
-      const net = cfg.nodes[o].lan;
-      return { cidr: net, net: TM.netStr(TM.parseCidr(net)), mask: maskOf(net), via: cfg.nodes[o].wan_ip };
-    });
+    n.routes = ids.filter((o) => o !== id).flatMap((o) => cfg.nodes[o].lans.map(({ net }) =>
+      ({ cidr: net, net: TM.netStr(TM.parseCidr(net)), mask: maskOf(net), via: cfg.nodes[o].wan_ip })));
     n.tunnels = [];
     nodes[id] = n;
   });
@@ -469,7 +489,12 @@ function main() {
         cryptoErrors: R.issues.filter(([sev, , cat]) => sev === "err" && cat === "crypto").map(([, t]) => t),
         verify: R.issues.filter(([, , cat]) => cat === "verify").map(([, t]) => t),
       },
-      ping: { a: { src: cfg.nodes[a].lan_ip, dst: cfg.nodes[b].lan_ip }, b: { src: cfg.nodes[b].lan_ip, dst: cfg.nodes[a].lan_ip } },
+      // one ping per subnet pair and direction; each pair is its own SA
+      pings: {
+        a: cfg.nodes[a].lans.flatMap((la) => cfg.nodes[b].lans.map((lb) => ({ src: la.ip, dst: lb.ip }))),
+        b: cfg.nodes[b].lans.flatMap((lb) => cfg.nodes[a].lans.map((la) => ({ src: lb.ip, dst: la.ip }))),
+      },
+      subnetPairs: cfg.nodes[a].lans.length * cfg.nodes[b].lans.length,
       peers: { a: cfg.nodes[a].wan_ip, b: cfg.nodes[b].wan_ip },
     });
   }
@@ -505,7 +530,7 @@ function main() {
     fs.writeFileSync(path.join(out, `${id}.txt`), text + "\n");
   });
 
-  console.log(`Plan: ${ids.length} nodes, ${pairs.length} tunnels, profile "${profile}" → ${path.relative(process.cwd(), out)}/plan.json`);
+  console.log(`Plan: ${ids.length} nodes, ${pairs.length} tunnels, profile "${profile}"${lans > 1 ? `, ${lans} networks per node` : ""} → ${path.relative(process.cwd(), out)}/plan.json`);
   pairs.forEach((p) => console.log(`  ${KINDS[p.a].name.padEnd(10)} ↔ ${KINDS[p.b].name.padEnd(10)} ${p.skipped ? "skipped: " + p.skipped : p.label}${p.verdict && p.verdict.cryptoErrors.length ? "  (tool: crypto errors)" : ""}`));
 }
 

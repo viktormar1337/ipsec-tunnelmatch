@@ -48,14 +48,22 @@ Status:
 - OPNsense 26.7.7 <-> strongSwan: passed 2026-10-22
   (`lab/gns3/reference/2026-10-22-opnsense-26.7-strongswan.md`).
 - Templates for MikroTik, VyOS, OpenWrt and OPNsense: `python3 lab/gns3/add_templates.py`.
-- PAN-OS (VM-Series, unlicensed): driver tested only against a simulated console; template
-  "PA-VM" from the user's own qcow2 (6.5 GB RAM, 2 vCPU, adapter 1 = ethernet1/1).
+- PAN-OS 12.2.3 (VM-Series, unlicensed) <-> strongSwan 6.1.0: passed 2026-10-23
+  (`lab/gns3/reference/2026-10-23-panos-strongswan.md`), with a fix to the PAN-OS generator
+  (`crypto-profiles` path) that is not released yet. Template "PA-VM" from the user's own qcow2
+  (16 GB RAM, 2 vCPU, QEMU option `-cpu host`, adapter 1 = ethernet1/1).
+- The strongSwan image is built from Debian forky (strongSwan 6.1.0). OPNsense, pfSense, MikroTik,
+  VyOS, OpenWrt and PAN-OS each passed against it 2026-10-23
+  (`lab/gns3/reference/2026-10-23-strongswan-6.1-retest.md`).
+- Two networks per site (`--lans 2`, 4 subnet pairs per tunnel): strongSwan 6.1.0 against all six
+  passed 2026-10-23 (`lab/gns3/reference/2026-10-23-strongswan-two-lans.md`).
 - vSRX, IOS-XE, ASA: drivers tested only against simulated consoles; no templates on this
   server yet. Expect small fixes (prompts, show-command formats) on the first real run.
 
 When a run fails: read `lab/gns3/results/latest.md` and the per-node console logs in
 `lab/gns3/results/`, fix the driver in `run.py` (or the generator in `generate.js`), run
 `python3 lab/gns3/selftest.py` (needs root and strongSwan for the live part), and rerun with
-`--nodes <the failing pair>`. Use `--reuse` to retest without rebuilding.
+`--nodes <the failing pair>`. Use `--reuse` to retest without rebuilding;
+it also skips the config push, so after a generator or config-driver change run without it.
 
 Each node is a VM that takes RAM (see README); run subsets with `--nodes`.

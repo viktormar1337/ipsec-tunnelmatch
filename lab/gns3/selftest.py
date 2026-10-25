@@ -236,6 +236,9 @@ def test_parsers():
     two = SWANCTL_TWO_ESTABLISHED.replace("remote-ts=[10.8.0.0/24]}}}}\nlist-sa event {vyos {uniqueid=1", "remote-ts=[10.8.100.0/24]}}}}\nlist-sa event {vyos {uniqueid=1")
     r = run.parse_swanctl_raw(two, "203.0.113.18")
     check(r and r["pairs"] == 2, f"swanctl: subnet pairs spread over two IKE_SAs are both counted: {r and r['pairs']}")
+    aged = SWANCTL_TWO_ESTABLISHED.replace("state=INSTALLED mode=TUNNEL", "state=INSTALLED install-time=17 mode=TUNNEL", 1)
+    r = run.parse_swanctl_ages(aged, "203.0.113.18")
+    check(r == {"ike_sas": 2, "ike_oldest": 29, "child_sas": 2, "child_oldest": 17}, f"swanctl SA ages: {r}")
     r = run.parse_panos(PANOS_IKE, PANOS_IPSEC, "203.0.113.14")
     check(r == {"ike": {"state": "ESTABLISHED", "dh": 20, "encr": "AES-GCM-256", "integ": None},
                 "esp": {"encr": "AES-GCM-256", "integ": None, "pfs": 20}, "counters": {}, "tunnels": [4]},
@@ -380,7 +383,7 @@ def test_live(profile, libipsec):
     pair = {
         "a": "strongswan", "b": "strongswan2", "label": profile, "expect": expect,
         "verdict": {"cryptoErrors": []},
-        "ping": {"a": {"src": "10.21.0.1", "dst": "10.22.0.1"}, "b": {"src": "10.22.0.1", "dst": "10.21.0.1"}},
+        "pings": {"a": [{"src": "10.21.0.1", "dst": "10.22.0.1"}], "b": [{"src": "10.22.0.1", "dst": "10.21.0.1"}]},
         "peers": {"a": "203.0.113.21", "b": "203.0.113.22"},
     }
     run.NAMES["strongswan2"] = "TM-STRONGSWAN-2"

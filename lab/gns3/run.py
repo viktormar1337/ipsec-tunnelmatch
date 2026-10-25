@@ -6,6 +6,7 @@ every tunnel: SAs up, negotiated algorithms as expected, and traffic both ways.
 
     python3 lab/gns3/run.py [--config lab/gns3/lab.json] [--profile strongest]
                             [--keep] [--reuse] [--nodes iosxe,strongswan] [--lans 2] [--dry-run]
+                            [--rekey 300]
 
 Python 3.9+ standard library only (telnetlib is gone in 3.13, so a small telnet
 client is included). Needs Node.js for the plan, and a GNS3 2.2 or 3.x server with
@@ -447,6 +448,26 @@ def parse_swanctl_raw(raw, peer):
     best["pairs"] = len(set().union(*(r.pop("ts") for r in found)))
     best.pop("ts", None)
     return best
+
+
+def parse_swanctl_ages(raw, peer):
+    """From `swanctl --list-sas --raw`: how many IKE SAs and installed child SAs there are toward
+    `peer`, and the age in seconds of the oldest of each (None where swanctl gives no age)."""
+    field = lambda s, k: (re.search(r"(?:^|[ {])" + re.escape(k) + r"=(\S+?)(?=[ }]|$)", s) or [None, None])[1]
+    ike, kids = [], []
+    for line in raw.splitlines():
+        if not line.startswith("list-sa event {"):
+            continue
+        body = line[len("list-sa event {"):]
+        at = body.find("child-sas {")
+        head = body if at < 0 else body[:at]
+        if field(head, "remote-host") != peer:
+            continue
+        ike.append(field(head, "established"))
+        if at >= 0:
+            kids += [field(m.group(0), "install-time") for m in re.finditer(r"[\w.-]+ \{[^{}]*state=INSTALLED[^{}]*\}", body[at:])]
+    oldest = lambda ages: max((int(a) for a in ages if a and a.isdigit()), default=None)
+    return {"ike_sas": len(ike), "ike_oldest": oldest(ike), "child_sas": len(kids), "child_oldest": oldest(kids)}
 
 
 def parse_routeros_sas(peers_text, sa_text, me, peer):
@@ -1267,6 +1288,50 @@ def test_pair(pair, drivers):
     return res
 
 
+def soak_pair(pair, drivers, rekey, res):
+    """Keep pinging every subnet pair both ways for 1.5 phase 1 lifetimes, so both the child SAs
+    and the IKE SA rekey at least once; any round without a reply fails. strongSwan reports SA
+    ages, which show the rekeys really happened."""
+    def check(ok, text):
+        res["checks"].append({"ok": bool(ok), "text": text})
+
+    secs = rekey["p1life"] * 3 // 2
+    log(f"  soak {NAMES[pair['a']]} ↔ {NAMES[pair['b']]}: {secs} s across rekeys (lifetimes {rekey['p1life']}/{rekey['p2life']} s)")
+    end = time.time() + secs
+    rounds, dead, got_sum, sent_sum = 0, [], 0, 0
+    while time.time() < end:
+        start = time.time()
+        for side in ("a", "b"):
+            for p in pair["pings"][side]:
+                got = drivers[pair[side]].ping(p["src"], p["dst"])
+                if got is None:
+                    continue
+                got_sum, sent_sum = got_sum + got[0], sent_sum + got[1]
+                if got[0] == 0:
+                    dead.append(f"{int(secs - (end - time.time()))} s: {NAMES[pair[side]]} {p['src']} → {p['dst']}")
+        rounds += 1
+        time.sleep(max(0, 20 - (time.time() - start)))
+    check(not dead and sent_sum, f"Soak {secs} s, {rounds} rounds: {got_sum}/{sent_sum} replies"
+          + (f", no reply at {'; '.join(dead[:5])}" + (f" (+{len(dead) - 5} more)" if len(dead) > 5 else "") if dead else ""))
+    want = pair.get("subnetPairs", 1)
+    for side, other in (("a", "b"), ("b", "a")):
+        d = drivers[pair[side]]
+        name = NAMES[pair[side]]
+        sa = d.sas(pair["peers"][other])
+        check(sa and sa["ike"].get("state") in ("ESTABLISHED", "READY", "UP-ACTIVE"),
+              f"{name}: after the soak IKE SA {sa['ike'].get('state') if sa else 'missing'}")
+        if not isinstance(d, Shell):
+            continue
+        ages = parse_swanctl_ages(d.run("swanctl --list-sas --raw", 60), pair["peers"][other])
+        ike_old, kid_old = ages["ike_oldest"], ages["child_oldest"]
+        check(ike_old is not None and ike_old < secs, f"{name}: IKE SA rekeyed (oldest {ike_old} s old, soak {secs} s)")
+        check(kid_old is not None and kid_old < rekey["p2life"] * 1.2,
+              f"{name}: child SAs rekeyed (oldest installed {kid_old} s ago, lifetime {rekey['p2life']} s)")
+        # a duplicate IKE SA (both ends initiated) is harmless; more than that means SAs pile up
+        check(ages["ike_sas"] <= 2 and ages["child_sas"] <= 2 * want,
+              f"{name}: {ages['ike_sas']} IKE SAs, {ages['child_sas']} installed child SAs toward the peer ({want} subnet pairs)")
+
+
 def fmt(d):
     return " / ".join(str(d[k]) for k in ("encr", "integ", "prf", "dh", "pfs") if d.get(k) is not None)
 
@@ -1280,6 +1345,7 @@ def write_report(meta, nodes, pairs):
         "# IPsec Tunnelmatch GNS3 lab",
         "",
         f"{meta['when']} · GNS3 {meta['gns3']} ({meta['api']}) · profile `{meta['profile']}` · "
+        + (f"lifetimes {meta['rekey']['p1life']}/{meta['rekey']['p2life']} s with rekey soak · " if meta.get("rekey") else "") +
         f"{sum(p['ok'] for p in pairs)}/{len(pairs)} tunnels passed",
         "",
         "| | Tunnel | Profile | Failed checks |",
@@ -1328,6 +1394,7 @@ def main():
     ap.add_argument("--keep", action="store_true", help="leave the project running afterwards")
     ap.add_argument("--reuse", action="store_true", help="use the existing project and running nodes; skip build and config push")
     ap.add_argument("--lans", type=int, default=1, help="networks per node (1-3); each tunnel then carries N x N subnet pairs")
+    ap.add_argument("--rekey", type=int, default=0, help="phase 2 lifetime N s, phase 1 2N s (at least 180), then ping through rekeys for 3N s")
     ap.add_argument("--dry-run", action="store_true", help="generate the plan and check the GNS3 server and templates only")
     opt = ap.parse_args()
 
@@ -1362,13 +1429,15 @@ def main():
         gen += ["--profile", opt.profile]
     if opt.lans != 1:
         gen += ["--lans", str(opt.lans)]
+    if opt.rekey:
+        gen += ["--rekey", str(opt.rekey)]
     if subprocess.run(gen).returncode != 0:
         sys.exit("Plan generation failed (message above).")
     with open(os.path.join(HERE, "out", "plan.json"), encoding="utf-8") as f:
         plan = json.load(f)
     secrets = sorted({c["psk"] for n in plan["nodes"].values() for key in ("connections", "tunnels")
                       for c in n.get("data", {}).get(key, [])} |
-                     set(re.findall(r"pre-shared-key (\w+)", json.dumps(plan))) |
+                     set(re.findall(r"pre-shared-key (?!key\b)(\w+)", json.dumps(plan))) |  # not PAN-OS's "pre-shared-key key"
                      set(re.findall(r'secret = \\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'secret=\\"(\w+)\\"', json.dumps(plan))) |
                      set(re.findall(r'ascii-text \\"(\w+)\\"', json.dumps(plan))) |
@@ -1414,7 +1483,7 @@ def main():
         return
 
     os.makedirs(RESULTS, exist_ok=True)
-    meta = {"when": time.strftime("%Y-%m-%d %H:%M"), "gns3": g.version, "api": g.v, "profile": plan["profile"]}
+    meta = {"when": time.strftime("%Y-%m-%d %H:%M"), "gns3": g.version, "api": g.v, "profile": plan["profile"], "rekey": plan.get("rekey")}
     project = g.project_by_name(plan["project"]) if opt.reuse else None
     if opt.reuse and not project:
         sys.exit(f"--reuse: no project named {plan['project']}")
@@ -1508,6 +1577,9 @@ def main():
             continue
         try:
             r = test_pair(pair, drivers)
+            if r["ok"] and plan.get("rekey"):
+                soak_pair(pair, drivers, plan["rekey"], r)
+                r["ok"] = all(c["ok"] for c in r["checks"])
         except Exception as e:
             r = {"a": pair["a"], "b": pair["b"], "label": pair.get("label"), "ok": False,
                  "checks": [{"ok": False, "text": f"{type(e).__name__}: {e}"}]}

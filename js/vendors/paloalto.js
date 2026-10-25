@@ -45,6 +45,8 @@
       `${gw} protocol ikev2 ike-crypto-profile IKE-${n}`,
       `${gw} protocol ikev2 dpd enable yes`,
       `${gw} protocol ikev2 dpd interval ${S.dpdInt}`,
+      // without it PAN-OS answers NO_PROPOSAL_CHOSEN to peers that start on UDP 4500 (RouterOS does)
+      `${gw} protocol-common nat-traversal enable yes`,
       `${gw} authentication pre-shared-key key "${TM.PSK}"`,
       `${gw} local-address interface ${wan}`,
       `${gw} peer-address ip ${c.peer.ip}`,

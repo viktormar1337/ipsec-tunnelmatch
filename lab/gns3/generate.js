@@ -7,9 +7,12 @@
  * config. run.py then pushes the configs over the GNS3 consoles and verifies them.
  *
  *   node lab/gns3/generate.js [--config lab/gns3/lab.json] [--profile strongest|recommended|minimum] [--lans 2]
+ *                          [--rekey 300]
  *
  * --lans N gives every node N local networks (its "lan" plus 10.x.100.0/24, 10.x.200.0/24 in
  * the same layout), so each tunnel carries N x N subnet pairs.
+ * --rekey N sets the tool's phase 2 lifetime to N s and phase 1 to 2N s (instead of 3600 and
+ * 28800), so run.py can watch the tunnels rekey.
  *
  * Output (lab/gns3/out/, git-ignored because it holds the lab's pre-shared keys):
  *   plan.json        everything run.py needs
@@ -56,7 +59,10 @@ function args() {
   const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
   const lans = Number(get("--lans", 1));
   if (!(lans >= 1 && lans <= 3)) throw new Error(`--lans must be 1, 2 or 3 (got ${get("--lans")})`);
-  return { cfg, cfgPath, profile: get("--profile", cfg.profile || "strongest"), out: get("--out", path.join(HERE, "out")), lans };
+  const rekey = Number(get("--rekey", 0));
+  // 180 s is the lowest lifetime every platform accepts (Junos)
+  if (!(rekey === 0 || rekey >= 180)) throw new Error(`--rekey must be at least 180 s (got ${get("--rekey")})`);
+  return { cfg, cfgPath, profile: get("--profile", cfg.profile || "strongest"), out: get("--out", path.join(HERE, "out")), lans, rekey };
 }
 
 /* The node's networks: its "lan", then the same addresses with the third octet 100, 200. */
@@ -465,7 +471,7 @@ function clean(lines) { return lines.filter((l) => l !== undefined && l.trim() !
 /* ---------- main ---------- */
 
 function main() {
-  const { cfg, cfgPath, profile, out, lans } = args();
+  const { cfg, cfgPath, profile, out, lans, rekey } = args();
   const prefix = Number(cfg.wan.net.split("/")[1]);
   const ids = Object.keys(KINDS).filter((id) => cfg.nodes[id] && cfg.nodes[id].enabled !== false);
   if (ids.length < 2) throw new Error("Enable at least two nodes in the lab config.");
@@ -486,6 +492,7 @@ function main() {
     const prof = pickProfile(cfg, a, b, profile);
     if (!prof) { pairs.push({ a, b, skipped: "no common profile without crypto errors" }); continue; }
     const S = stateFor(cfg, a, b, prof);
+    if (rekey) Object.assign(S, { p1life: 2 * rekey, p2life: rekey });
     const R = TM.analyze(S);
     const psk = crypto.randomBytes(16).toString("hex");
     SIDES.forEach((k) => {
@@ -526,6 +533,7 @@ function main() {
     generated: new Date().toISOString(),
     config: path.relative(process.cwd(), cfgPath),
     profile,
+    rekey: rekey ? { p1life: 2 * rekey, p2life: rekey } : null,
     server: cfg.server,
     project: cfg.project || "tunnelmatch-lab",
     nodes: planNodes,
@@ -544,7 +552,7 @@ function main() {
     fs.writeFileSync(path.join(out, `${id}.txt`), text + "\n");
   });
 
-  console.log(`Plan: ${ids.length} nodes, ${pairs.length} tunnels, profile "${profile}"${lans > 1 ? `, ${lans} networks per node` : ""} → ${path.relative(process.cwd(), out)}/plan.json`);
+  console.log(`Plan: ${ids.length} nodes, ${pairs.length} tunnels, profile "${profile}"${lans > 1 ? `, ${lans} networks per node` : ""}${rekey ? `, lifetimes ${2 * rekey}/${rekey} s` : ""} → ${path.relative(process.cwd(), out)}/plan.json`);
   pairs.forEach((p) => console.log(`  ${KINDS[p.a].name.padEnd(10)} ↔ ${KINDS[p.b].name.padEnd(10)} ${p.skipped ? "skipped: " + p.skipped : p.label}${p.verdict && p.verdict.cryptoErrors.length ? "  (tool: crypto errors)" : ""}`));
 }
 

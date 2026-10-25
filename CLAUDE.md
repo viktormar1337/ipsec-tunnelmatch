@@ -58,6 +58,10 @@ Status:
   (`lab/gns3/reference/2026-10-23-strongswan-6.1-retest.md`).
 - Two networks per site (`--lans 2`, 4 subnet pairs per tunnel): strongSwan 6.1.0 against all six
   passed 2026-10-23 (`lab/gns3/reference/2026-10-23-strongswan-two-lans.md`).
+- Cross-vendor and rekey (2026-10-24, `lab/gns3/reference/2026-10-24-cross-vendor-and-rekey.md`):
+  PAN-OS <-> MikroTik passed after a PAN-OS generator fix (NAT-T on the gateway); open: RouterOS
+  rejects PAN-OS's AUTH when PAN-OS initiates. VyOS <-> MikroTik `--lans 2` passed. Rekey soak
+  (`--rekey 300`) strongSwan <-> MikroTik and strongSwan <-> PAN-OS passed.
 - vSRX, IOS-XE, ASA: drivers tested only against simulated consoles; no templates on this
   server yet. Expect small fixes (prompts, show-command formats) on the first real run.
 

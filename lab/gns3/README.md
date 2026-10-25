@@ -16,6 +16,8 @@ Every pair of nodes gets a tunnel (45 with all ten nodes), policy-based wherever
 
 `--lans 2` (or 3) gives every node more local networks: its LAN plus 10.x.100.0/24 (and 10.x.200.0/24), as extra loopback, dummy or alias addresses. Each tunnel then carries 4 (or 9) subnet pairs, one SA per pair, and the checks ping every pair in both directions and count the subnet pairs with an installed SA where the device shows them (swanctl-based nodes, PAN-OS proxy-IDs). ASA is left out (its LAN is a physical interface). On PAN-OS every extra network gets the next interface (`ethernet1/3`, `ethernet1/4`) with its own LAN switch and VPCS host (10.10.100.10, 10.10.200.10), so all PAN-OS-side pings run from hosts.
 
+`--rekey 300` sets the tool's lifetimes to 300 s (phase 2) and 600 s (phase 1, always twice the value; at least 180 s, the Junos minimum) and, after the normal checks, keeps pinging every subnet pair both ways every 20 s for 1.5 phase 1 lifetimes (900 s), so the child SAs rekey about three times and the IKE SA at least once. Any round without a reply fails. On swanctl-based nodes the SA ages show that the rekeys happened (oldest IKE SA younger than the soak, oldest child SA younger than its lifetime), and more than two IKE SAs or twice the expected child SAs toward the peer fails, so duplicate SAs that pile up are caught. Run it with strongSwan as one side.
+
 For every tunnel it checks:
 
 1. the tool reports no crypto errors for the pair

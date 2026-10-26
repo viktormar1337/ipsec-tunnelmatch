@@ -5,7 +5,7 @@ other generators with each other and add a rekey test. GNS3 2.2.61, strongest co
 
 | Run | Pair | Result |
 |---|---|---|
-| `--nodes panos,mikrotik` | PAN-OS 12.2.3 ↔ MikroTik CHR 7.24.5 | first run failed (no IKE SA); passed after a PAN-OS generator fix |
+| `--nodes panos,mikrotik` | PAN-OS 12.2.3 ↔ MikroTik CHR 7.24.5 | first run failed (no IKE SA); passed after a PAN-OS generator fix (NAT-T) and a MikroTik one (`my-id=auto`) |
 | `--nodes vyos,mikrotik --lans 2` | VyOS rolling ↔ MikroTik, 4 subnet pairs | passed: 8/8 pings, child SAs 4 of 4 |
 | `--nodes strongswan,mikrotik --rekey 300` | strongSwan 6.1.0 ↔ MikroTik | passed: 450/450 replies over 900 s, IKE and child SAs rekeyed, 1 IKE SA at the end |
 | `--nodes strongswan,panos --rekey 300` | strongSwan 6.1.0 ↔ PAN-OS | passed: 450/450 replies over 900 s, IKE and child SAs rekeyed, 1 IKE SA at the end |
@@ -23,14 +23,28 @@ IKE SA after the first run. Two separate problems, found with RouterOS `ipsec` d
    (harmless without NAT; the tool's MikroTik config already has `nat-traversal=yes`).
    The rerun passed, and strongSwan ↔ PAN-OS passed again with the change (rekey run above).
 
-2. **Open: RouterOS rejects PAN-OS as initiator.** When PAN-OS starts the exchange, MikroTik
-   decrypts its IKE_AUTH and then logs `identity not found for peer: ADDR4:203.0.113.20` and
-   answers AUTHENTICATION_FAILED. The PSK is the same on both sides (when MikroTik initiates,
-   both AUTH payloads verify), and it still failed with `remote-id=ignore`, with FQDN IDs,
-   with SHA-256 instead of SHA-384, with NAT-T on or off on either side, and with
-   `generate-policy=port-override`. Not resolved. In practice the tunnel still comes up:
-   MikroTik initiates every few seconds and that direction works, and rekeys run inside the
-   IKE SA without a new AUTH. A PAN-OS-only restart waits for MikroTik's next attempt.
+2. **RouterOS rejected PAN-OS as initiator** (solved 2026-10-26). When PAN-OS started the
+   exchange, MikroTik decrypted its IKE_AUTH, logged `identity not found for peer:
+   ADDR4:203.0.113.20` and answered AUTHENTICATION_FAILED. Ruled out on 2026-10-24: the PSK,
+   `remote-id=ignore`, FQDN IDs, SHA-256 instead of SHA-384, NAT-T on either side,
+   `generate-policy=port-override`. On 2026-10-26:
+   - PAN-OS as initiator toward a responder-only strongSwan 6.1.0 came up, so PAN-OS's AUTH
+     is accepted by a strict implementation.
+   - A capture of the failing exchange on the PAN-OS WAN link plus the DH shared secret from
+     RouterOS's `ipsec` debug log let us derive the IKE keys offline: the ICV of PAN-OS's
+     IKE_AUTH verified (keys right), and its AUTH value is exactly the RFC 7296 value
+     (`prf(prf(PSK, "Key Pad for IKEv2"), IKE_SA_INIT request | Nr | prf(SK_pi, IDi))`).
+     PAN-OS was correct.
+   - PAN-OS's IKE_AUTH carries IDi, AUTH, N, SA, TSi, TSr and no IDr (IDr is optional);
+     strongSwan sends one. With the identity's `my-id=auto` instead of
+     `my-id=address:203.0.113.16`, RouterOS accepted PAN-OS at once. Setting `peer-id` on the
+     PAN-OS gateway does not make PAN-OS send IDr.
+
+   **Cause:** RouterOS 7.24.5, as responder, does not find an identity with an explicit
+   `my-id` when the initiator sends no IDr. **Fix:** the MikroTik generator now writes
+   `my-id=auto`. With `local-address` set to the same address, RouterOS sends the same IDi as
+   before. Verified: PAN-OS ↔ MikroTik with PAN-OS initiating (MikroTik passive), and
+   strongSwan ↔ MikroTik (strongSwan checks MikroTik's ID) passed again.
 
 Also fixed: the lab's log masking took the PAN-OS keyword `key` (from `pre-shared-key key "…"`)
 as a secret, so logs showed `pre-shared-<PSK> <PSK>`. The key itself was always masked.

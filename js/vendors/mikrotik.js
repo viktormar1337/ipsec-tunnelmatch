@@ -43,7 +43,9 @@
       "/ip ipsec peer",
       `add name=${n} address=${c.peer.ip}/32 local-address=${c.me.ip} exchange-mode=ike2 profile=${prof}`,
       "/ip ipsec identity",
-      `add peer=${n} auth-method=pre-shared-key secret=${q(TM.PSK)} my-id=address:${c.me.ip} remote-id=address:${c.peer.ip} generate-policy=no`,
+      // my-id=auto sends the local-address (the same ID); with an explicit my-id RouterOS 7.24.5 as
+      // responder rejects initiators that send no IDr (PAN-OS) with "identity not found"
+      `add peer=${n} auth-method=pre-shared-key secret=${q(TM.PSK)} my-id=auto remote-id=address:${c.peer.ip} generate-policy=no`,
       "/ip ipsec proposal",
       `add name=${prof} enc-algorithms=${N.enc2[S.p2enc]} auth-algorithms=${isGcm(S.p2enc) ? '""' : N.auth[S.p2int]} \\`,
       `    pfs-group=${S.pfs ? N.dh[S.pfs] : "none"} lifetime=${rosTime(S.p2life)}`,
@@ -102,7 +104,7 @@
     generate,
     sources: {
       status: "Verified 2026-10-20",
-      used: "Profile options (enc-algorithm AES-CBC/3DES only, hash and prf-algorithm up to SHA-512, DH modp768–8192 and ecp256/384/521, lifetime and dpd-maximum-failures documented as IKEv1-only), proposal options (AES-CBC/CTR/GCM, auth up to SHA-512 without SHA-384, PFS groups), peers with exchange-mode=ike2, identities with my-id/remote-id, policies with level=unique, and the srcnat bypass for site-to-site. AES-GCM in phase 2 is generated with an empty auth-algorithms=\"\": RouterOS 7.24.5 rejects auth-algorithms=null and the default sha1 with \"AEAD already provides authentication\" (GNS3 lab, CHR 7.24.5).",
+      used: "Profile options (enc-algorithm AES-CBC/3DES only, hash and prf-algorithm up to SHA-512, DH modp768–8192 and ecp256/384/521, lifetime and dpd-maximum-failures documented as IKEv1-only), proposal options (AES-CBC/CTR/GCM, auth up to SHA-512 without SHA-384, PFS groups), peers with exchange-mode=ike2, identities with my-id/remote-id, policies with level=unique, and the srcnat bypass for site-to-site. AES-GCM in phase 2 is generated with an empty auth-algorithms=\"\": RouterOS 7.24.5 rejects auth-algorithms=null and the default sha1 with \"AEAD already provides authentication\" (GNS3 lab, CHR 7.24.5). The identity uses my-id=auto (the local-address): with an explicit my-id, CHR 7.24.5 as responder rejected PAN-OS 12.2, which sends no IDr, with \"identity not found\" (GNS3 lab).",
       links: [
         ["MikroTik CLI reference: /ip ipsec profile", "https://manual.mikrotik.com/docs/cli-reference/ip/ipsec/profile"],
         ["MikroTik CLI reference: /ip ipsec proposal", "https://manual.mikrotik.com/docs/cli-reference/ip/ipsec/proposal"],

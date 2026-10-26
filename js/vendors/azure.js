@@ -554,7 +554,13 @@ type trafficSelectorPolicyType = {
       p2int: ["sha1", "sha256", "md5"],
       pfs: [0, 2, 14, 19, 20, 24],
     },
-    fields: { azure: true },
+    fields: {
+      azure: true, // connection mode and Bicep types file
+      rg: ["Resource group", ""],
+      gw: ["VPN gateway name", ""],
+      loc: ["Region", ""],
+      iac: [["bicep", "Bicep (.bicepparam + main.bicep)"], ["terraform", "Terraform (azurerm)"]],
+    },
     hint: "Azure is always route-based. Against a policy-based peer, usePolicyBasedTrafficSelectors is switched on automatically.",
     dpdTimeout,
     names: (S) => ({

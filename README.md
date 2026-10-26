@@ -22,6 +22,8 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 | Platform | Output | Status |
 |---|---|---|
 | Microsoft Azure VPN Gateway | Bicep: `.bicepparam` + `main.bicep` (AVM `network/connection` 0.1.7 parameter names), or Terraform: `.tfvars` + `main.tf` + `variables.tf` (azurerm 4.x, same inputs) | Verified |
+| AWS Site-to-Site VPN | AWS CLI shell script, or Terraform: `.tfvars` + `main.tf` + `variables.tf` (hashicorp/aws 6.x); virtual private or transit gateway, static routes, both tunnels | Verified |
+| Google Cloud VPN (Classic, static routing) | gcloud shell script, or Terraform: `.tfvars` + `main.tf` + `variables.tf` (hashicorp/google 8.x, cipher suite, write-only shared secret) | Verified |
 | Palo Alto Networks PAN-OS | `set` commands | Verified |
 | Cisco Meraki MX | Dashboard field values | Verified |
 | Fortinet FortiGate | FortiOS CLI | Syntax reference |
@@ -39,7 +41,7 @@ Everything runs in the browser. Nothing is sent anywhere, and the pre-shared key
 | Ubiquiti UniFi gateway | Manual IPsec field values (route- or policy-based) | Syntax reference |
 | Check Point Quantum (R82) | `mgmt_cli` commands (Interoperable Device, star community, custom suite) and Gaia VTI | Verified |
 
-"Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper, MikroTik, VyOS, OpenWrt and Sophos 2026-10-20; Aruba and Check Point 2026-10-21). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
+"Verified" means the supported algorithms and limits were checked against the vendor's own documentation (2026-10-19; Juniper, MikroTik, VyOS, OpenWrt and Sophos 2026-10-20; Aruba and Check Point 2026-10-21; AWS and Google Cloud 2026-10-26). "Syntax reference" means commands and field names follow vendor docs, but the algorithm lists have not yet been checked against a version-specific table. All sources are listed in the Sources section of the page.
 
 Aruba Instant On is not included: HPE publishes no documentation of its site-to-site settings toward third-party peers. Screenshots of the Instant On VPN settings (via a [vendor correction](../../issues/new/choose) issue) would let us add it.
 
@@ -76,6 +78,13 @@ Got a tunnel running? Use **Report a working configuration** in the tool: it ope
 ## Azure Bicep
 
 The Azure output imports `ipsecPolicyType` and `trafficSelectorPolicyType` from a types file you provide (default `./types.bicep`). The page shows the exports that file needs. The shared key is read with `readEnvironmentVariable('VPN_PSK')` at deploy time.
+
+## AWS and Google Cloud
+
+Both are route-based with static routes and carry one SA pair per tunnel. Against a policy-based peer the selectors are narrowed to the single subnet pair; with more than one pair the tool reports an error (summarize each side into one CIDR, or make the peer route-based). Both require PFS.
+
+- **AWS**: every VPN connection has two tunnels with their own outside IPs, and both get the same settings. Enter the tunnel 1 address as the AWS public IP and repeat the peer config for tunnel 2. A gateway ID starting with `tgw-` switches to a transit gateway (static routes in its route table). The key is read from `VPN_PSK` (CLI) or `TF_VAR_vpn_shared_key`. The aws provider has no write-only argument for it, so it is in the Terraform state.
+- **Google Cloud**: Classic VPN with static routing, because HA VPN requires BGP, which the tool does not generate. Classic VPN static routing is still supported (only its BGP mode was deprecated, 2025-08-01). Cloud VPN's lifetimes are fixed (36,000 s / 10,800 s); set the peer to the same values. The Terraform output sends the key write-only (`shared_secret_wo`, Terraform 1.11+), so it is not stored in state.
 
 ## Use
 

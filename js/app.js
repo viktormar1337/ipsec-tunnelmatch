@@ -67,11 +67,11 @@
         <label>VPN type<select id="${k}mode"><option value="route">Route-based (VTI)</option><option value="policy">Policy-based</option></select></label>
         <label id="${k}ifaceL"><span id="${k}ifaceT">WAN interface</span><input id="${k}iface" class="mono"></label>
         <label id="${k}tunL"><span id="${k}tunT">Tunnel interface</span><input id="${k}tun" class="mono"></label>
-        <label id="${k}rgL">Resource group<input id="${k}rg" class="mono"></label>
-        <label id="${k}gwL">VPN gateway name<input id="${k}gw" class="mono"></label>
-        <label id="${k}locL">Region<input id="${k}loc" class="mono"></label>
+        <label id="${k}rgL"><span id="${k}rgT">Resource group</span><input id="${k}rg" class="mono"></label>
+        <label id="${k}gwL"><span id="${k}gwT">VPN gateway name</span><input id="${k}gw" class="mono"></label>
+        <label id="${k}locL"><span id="${k}locT">Region</span><input id="${k}loc" class="mono"></label>
         <label id="${k}cmodeL">Connection mode<select id="${k}cmode"><option>Default</option><option>InitiatorOnly</option><option>ResponderOnly</option></select></label>
-        <label id="${k}iacL">Infrastructure as code<select id="${k}iac"><option value="bicep">Bicep (.bicepparam + main.bicep)</option><option value="terraform">Terraform (azurerm)</option></select></label>
+        <label id="${k}iacL">Output<select id="${k}iac"></select></label>
         <label id="${k}typesL">Bicep types file (required)<input id="${k}types" class="mono" placeholder="./types.bicep"></label>
       </div>
       <p class="hint side-hint" id="${k}vhint"></p>`;
@@ -88,7 +88,23 @@
     $(k + "tunL").hidden = !f.tun;
     if (f.iface) $(k + "ifaceT").textContent = f.iface;
     if (f.tun) $(k + "tunT").textContent = f.tun;
-    ["rg", "gw", "loc", "cmode", "iac", "types"].forEach((x) => { $(k + x + "L").hidden = !f.azure; });
+    // cloud platforms: labelled text fields [label, placeholder] and their output formats
+    ["rg", "gw", "loc"].forEach((x) => {
+      $(k + x + "L").hidden = !f[x];
+      if (f[x]) { $(k + x + "T").textContent = f[x][0]; $(k + x).placeholder = f[x][1] || ""; }
+    });
+    $(k + "iacL").hidden = !f.iac;
+    if (f.iac) {
+      const sel = $(k + "iac");
+      const opts = f.iac.map(([v]) => v).join();
+      if (sel.dataset.opts !== opts) {
+        sel.innerHTML = f.iac.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
+        sel.dataset.opts = opts;
+      }
+      if (!f.iac.some(([v]) => v === S[k].iac)) S[k].iac = f.iac[0][0];
+      sel.value = S[k].iac;
+    }
+    ["cmode", "types"].forEach((x) => { $(k + x + "L").hidden = !f.azure; });
     if (f.azure && S[k].iac === "terraform") $(k + "typesL").hidden = true;
     $(k + "vhint").textContent = v.hint || "";
     $("h" + k).textContent = S[k].name || "Site " + k;
@@ -120,16 +136,18 @@
       isGcm(S.p2enc) ? [[S.p2enc, encLabel(S.p2enc) + " (built in)"]] : INT.map(([v, l]) => [v, l + unsupportedBy("p2int", v)]),
       S.p2int);
     $("p2int").disabled = isGcm(S.p2enc);
-    fillSelect($("pfs"), PFS.map(([v, l]) => [v, l + (v ? unsupportedBy("pfs", v) : "")]), S.pfs);
+    fillSelect($("pfs"), PFS.map(([v, l]) => [v, l + unsupportedBy("pfs", v)]), S.pfs);
 
     $("p1intLabel").textContent = isGcm(S.p1enc) ? "PRF (GCM provides integrity)" : "Integrity / PRF";
     $("p2hint").textContent = isGcm(S.p2enc)
       ? "GCM provides both encryption and integrity in ESP. Azure requires the same GCM value for IPsec encryption and integrity."
       : "";
 
-    const azure = SIDES.some((k) => S[k].vendor === "azure");
+    const has = (id) => SIDES.some((k) => S[k].vendor === id);
     $("dpdHint").textContent = `Dead peer declared after about ${S.dpdInt * S.dpdRetry} s.` +
-      (azure ? ` Azure has no retry count: dpdTimeoutSeconds = interval × retries = ${TM.vendor("azure").dpdTimeout(S)} s.` : "");
+      (has("azure") ? ` Azure has no retry count: dpdTimeoutSeconds = interval × retries = ${TM.vendor("azure").dpdTimeout(S)} s.` : "") +
+      (has("aws") ? ` AWS has no retry count: DPDTimeoutSeconds = ${TM.vendor("aws").dpdTimeout(S)} s (at least 30).` : "") +
+      (has("gcp") ? " Google Cloud's DPD interval is fixed." : "");
   }
 
   /* ---------- checks and selectors ---------- */

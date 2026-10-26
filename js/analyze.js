@@ -72,7 +72,7 @@
     supported("dh", S.dh, "DH group " + S.dh);
     supported("p2enc", S.p2enc, "Phase 2 encryption " + encLabel(S.p2enc));
     if (!isGcm(S.p2enc)) supported("p2int", S.p2int, "Phase 2 integrity " + intLabel(S.p2int));
-    if (S.pfs) supported("pfs", S.pfs, "PFS group " + S.pfs);
+    supported("pfs", S.pfs, S.pfs ? "PFS group " + S.pfs : "Turning PFS off"); // AWS and Google Cloud require PFS
 
     /* --- weak algorithms and basic sanity --- */
     if (LEGACY.enc.includes(S.p1enc) || LEGACY.enc.includes(S.p2enc))

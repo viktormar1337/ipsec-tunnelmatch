@@ -31,6 +31,32 @@ sys.path.insert(0, HERE)
 from run import Gns3  # noqa: E402
 
 DROP = {"template_id", "builtin", "usage"}
+CACHE = os.path.expanduser("~/.cache/tunnelmatch-gns3")
+
+
+def find_cached(name):
+    """add_templates.py's download of image `name` (plain, .gz, .bz2 or a .zip holding it), or None."""
+    for d, _, files in os.walk(CACHE):
+        for f in files:
+            if f == name or f in (name + ".gz", name + ".bz2", name + ".zip"):
+                return os.path.join(d, f)
+    return None
+
+
+def unpack(src, name, dst):
+    if src.endswith(".gz"):
+        import gzip
+        opener = gzip.open(src)
+    elif src.endswith(".bz2"):
+        import bz2
+        opener = bz2.open(src)
+    elif src.endswith(".zip"):
+        import zipfile
+        opener = zipfile.ZipFile(src).open(name)
+    else:
+        opener = open(src, "rb")
+    with opener as s, open(dst, "wb") as d:
+        shutil.copyfileobj(s, d, 1 << 20)
 
 
 def main():
@@ -98,8 +124,16 @@ def main():
             backing = info.get("backing-filename")
             if backing:  # linked clone: needs its base image too
                 base = os.path.join(tmp, os.path.basename(backing))
-                print(f"Downloading its base image {os.path.basename(backing)}")
-                g.download(f"/compute/qemu/images/{os.path.basename(backing)}", base)
+                # add_templates.py downloaded and uploaded this image itself and keeps the
+                # (compressed) download in its cache; GNS3 3.x's controller API has no image
+                # download route, so use that copy when there is one
+                cached = find_cached(os.path.basename(backing))
+                if cached:
+                    print(f"Using the cached base image {cached}")
+                    unpack(cached, os.path.basename(backing), base)
+                else:
+                    print(f"Downloading its base image {os.path.basename(backing)}")
+                    g.download(f"/compute/qemu/images/{os.path.basename(backing)}", base)
                 fmt = info.get("backing-filename-format") or ("qcow2" if base.endswith(".qcow2") else "raw")
                 subprocess.run([qemu_img, "rebase", "-u", "-F", fmt, "-b", base, overlay], check=True)
             flat = os.path.join(tmp, image)
@@ -118,6 +152,9 @@ def main():
         "boot_priority": "c",
         "console_type": "telnet",
         "linked_clone": True,
+        # GNS3 3.x rejects node names with spaces or parentheses ("OpenWrt(tmlab)-1"),
+        # so default node names use only letters and digits; run.py renames the nodes anyway
+        "default_name_format": re.sub(r"[^A-Za-z0-9]", "", opt.name) + "-{0}",
     })
     for k in ("adapters", "adapter_type", "ram", "cpus", "hda_disk_interface", "qemu_path", "platform"):
         if k in node.get("properties", {}) and k not in tpl:

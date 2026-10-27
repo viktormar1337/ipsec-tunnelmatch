@@ -165,7 +165,8 @@ def create_template(g, name, image, spec, compute_id, replace):
         return existing, False
     tpl = {
         "name": name, "template_type": "qemu", "compute_id": compute_id, "qemu_path": qemu_path(g),
-        "platform": "", "adapter_type": "virtio-net-pci", "console_type": "telnet", "boot_priority": "c",
+        # GNS3 3.x requires a platform value (2.2 accepted "" and derived it from qemu_path)
+        "platform": "x86_64", "adapter_type": "virtio-net-pci", "console_type": "telnet", "boot_priority": "c",
         "hda_disk_image": "", "cdrom_image": "", "linked_clone": True, "on_close": "power_off",
         "options": "", "default_name_format": "{name}-{0}",
     }
@@ -182,7 +183,7 @@ def boot_node(g, project_name, template, compute_id):
     """A fresh scratch project with one node of the template, started. Returns (project_id, node)."""
     pid = g.create_project(project_name)["project_id"]
     node = g.add_node(pid, template["template_id"], "check", 0, 0, compute_id)
-    g.api("POST", f"/projects/{pid}/nodes/{node['node_id']}/start")
+    g.api("POST", f"/projects/{pid}/nodes/{node['node_id']}/start", {})
     return pid, node
 
 
@@ -304,8 +305,8 @@ def prepare(g, base, name, spec, compute_id, cfg_path, replace):
     node = g.add_node(pid, base["template_id"], node_name, 0, 0, compute_id)
     nat = g.add_node(pid, g.template(ttype="nat")["template_id"], "NAT", 200, 0, compute_id)
     g.add_link(pid, (node["node_id"], spec["wan_adapter"], 0), (nat["node_id"], 0, 0))
-    g.api("POST", f"/projects/{pid}/nodes/{nat['node_id']}/start")
-    g.api("POST", f"/projects/{pid}/nodes/{node['node_id']}/start")
+    g.api("POST", f"/projects/{pid}/nodes/{nat['node_id']}/start", {})
+    g.api("POST", f"/projects/{pid}/nodes/{node['node_id']}/start", {})
     host, port, _ = g.console(pid, node["node_id"])
     os.makedirs(RESULTS, exist_ok=True)
     logfile = os.path.join(RESULTS, f"{project}.log")
@@ -322,8 +323,8 @@ def prepare(g, base, name, spec, compute_id, cfg_path, replace):
         if g.api("GET", f"/projects/{pid}/nodes/{node['node_id']}")["status"] == "stopped":
             break
     else:
-        g.api("POST", f"/projects/{pid}/nodes/{node['node_id']}/stop")
-    g.api("POST", f"/projects/{pid}/nodes/{nat['node_id']}/stop")
+        g.api("POST", f"/projects/{pid}/nodes/{node['node_id']}/stop", {})
+    g.api("POST", f"/projects/{pid}/nodes/{nat['node_id']}/stop", {})
     cmd = [sys.executable, os.path.join(HERE, "prepare_template.py"), "--config", cfg_path,
            "--project", project, "--node", node_name, "--name", name]
     if subprocess.run(cmd + (["--replace"] if replace else [])).returncode != 0:

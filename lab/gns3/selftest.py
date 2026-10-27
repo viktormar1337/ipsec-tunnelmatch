@@ -202,6 +202,14 @@ SWANCTL_TWO_ESTABLISHED = (
     "list-sas reply {}\n"
 )
 
+# OPNsense 26.7 with strongSwan on GNS3 3.0.6 (2026-10-26): both ends initiated, both IKE_SAs stay
+# ESTABLISHED, and each end sends on its own child SA and receives on the peer's
+SWANCTL_SPLIT = (
+    SWANCTL_TWO_ESTABLISHED
+    .replace("packets-in=0 packets-out=0", "packets-in=0 packets-out=10")
+    .replace("packets-in=10 packets-out=10", "packets-in=10 packets-out=0")
+)
+
 
 def test_parsers():
     r = run.parse_cisco_ikev2(IOSXE_IKEV2, "203.0.113.12")
@@ -233,6 +241,9 @@ def test_parsers():
     r = run.parse_swanctl_raw(SWANCTL_TWO_ESTABLISHED, "203.0.113.18")
     check(r and r["counters"] == {"encaps": 10, "decaps": 10}, f"swanctl: of two ESTABLISHED IKE_SAs, the one with traffic: {r}")
     check(r and r["pairs"] == 1, f"swanctl: the same subnet pair on both IKE_SAs counts once: {r and r['pairs']}")
+    r = run.parse_swanctl_raw(SWANCTL_SPLIT, "203.0.113.18")
+    check(r and r["counters"] == {"encaps": 10, "decaps": 10},
+          f"swanctl: traffic split over two ESTABLISHED IKE_SAs (out on one, in on the other) is summed: {r and r['counters']}")
     two = SWANCTL_TWO_ESTABLISHED.replace("remote-ts=[10.8.0.0/24]}}}}\nlist-sa event {vyos {uniqueid=1", "remote-ts=[10.8.100.0/24]}}}}\nlist-sa event {vyos {uniqueid=1")
     r = run.parse_swanctl_raw(two, "203.0.113.18")
     check(r and r["pairs"] == 2, f"swanctl: subnet pairs spread over two IKE_SAs are both counted: {r and r['pairs']}")

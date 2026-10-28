@@ -447,6 +447,11 @@ def parse_swanctl_raw(raw, peer):
     best = dict(found[0])
     best["pairs"] = len(set().union(*(r.pop("ts") for r in found)))
     best.pop("ts", None)
+    # with two established IKE_SAs (both ends initiated at once) each end can send on its own
+    # child SA and receive on the peer's, so count packets over all established ones
+    est = [r for r in found if r["ike"]["state"] == "ESTABLISHED" and r["counters"]]
+    if len(est) > 1:
+        best["counters"] = {k: sum(r["counters"].get(k, 0) for r in est) for k in ("encaps", "decaps")}
     return best
 
 

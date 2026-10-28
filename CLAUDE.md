@@ -38,8 +38,8 @@ python3 lab/gns3/run.py --nodes strongswan,opnsense --keep
 
 On the GNS3 server: `docker build -t tunnelmatch-strongswan:latest lab/gns3/strongswan`.
 Templates there: MikroTik CHR, VyOS, OpenWrt (tmlab), OPNsense 26.7 (tmlab) (from
-`add_templates.py`) and tunnelmatch-strongswan (created by `run.py`). PA-VM and pfSense 2.7.2
-(tmlab) are not there yet (the images are on the old server).
+`add_templates.py`), tunnelmatch-strongswan (created by `run.py`), and PA-VM and pfSense 2.7.2
+(tmlab) (images and template settings copied from the old server 2026-10-27).
 
 GNS3 3.x notes: node names may not contain spaces or parentheses (prepared templates get a
 `default_name_format` with letters and digits only); the controller API has no image download,
@@ -82,7 +82,8 @@ Status:
   `prepare_template.py` changes above. On this server both ends initiate at the same moment, so
   OPNsense <-> strongSwan ends with two ESTABLISHED IKE SAs, each end sending on its own child SA
   and receiving on the peer's; `parse_swanctl_raw` now sums the counters over the established
-  IKE SAs toward the peer (selftest case `SWANCTL_SPLIT`). Still to rerun here: pfSense, PAN-OS.
+  IKE SAs toward the peer (selftest case `SWANCTL_SPLIT`). pfSense 2.7.2 <-> strongSwan and
+  PAN-OS 12.2.3 <-> strongSwan passed here 2026-10-27.
 - vSRX, IOS-XE, ASA: drivers tested only against simulated consoles; no templates on the
   server yet. Expect small fixes (prompts, show-command formats) on the first real run.
 
